@@ -296,37 +296,40 @@ Every verified mis-route is logged to the `verification_log` table. Replaying th
 
 ```
 LLM_Cost_Autopilot/
-├── api.py                    # FastAPI service — auth middleware, endpoints, lifespan
-├── router.py                 # LLM classification + budget-aware resolve_backend()
-├── interface.py              # Unified send_request() across all backends
-├── budget.py                 # Async monthly budget tracking (aiosqlite)
-├── registry.py               # routing.yaml → ModelConfig objects
-├── models.py                 # Shared dataclasses (ModelConfig, Response, BudgetSnapshot …)
-├── logging_config.py         # JSON log formatter + request_id ContextVar
-├── verifier.py               # Quality verification logic (LLM-as-judge)
-├── verification_queue.py     # Async background queue (fire-and-forget)
-├── dashboard_data.py         # SQL queries for dashboard + /v1/stats
-├── dashboard.py              # Streamlit cost dashboard
-├── pages/
-│   └── 1_Playground.py       # Interactive prompt tester (Streamlit page)
-├── hardware_profile.py       # One-time hardware detection → recommends Ollama models
-├── check_models.py           # Utility to verify Ollama models are available
-├── load_test.py              # 500-prompt load test + savings report
-├── ollama.py                 # Ollama backend adapter
-├── github_models.py          # GitHub Models (Copilot) backend adapter
-├── claude.py                 # Anthropic Claude backend adapter
-├── routing.yaml              # Live-editable routing policy
-├── models_by_hardware.yaml   # Hardware size → recommended model mapping
-├── prompts/
-│   └── router_classify.txt   # Few-shot classification prompt (versioned)
+├── src/autopilot/            # Core application package
+│   ├── api.py                #   FastAPI service — auth middleware, endpoints, lifespan
+│   ├── router.py             #   LLM classification + budget-aware resolve_backend()
+│   ├── interface.py          #   Unified send_request() across all backends
+│   ├── budget.py             #   Async monthly budget tracking (aiosqlite)
+│   ├── registry.py           #   routing.yaml → ModelConfig objects
+│   ├── models.py             #   Shared dataclasses (ModelConfig, Response, BudgetSnapshot …)
+│   ├── logging_config.py     #   JSON log formatter + request_id ContextVar
+│   ├── verifier.py           #   Quality verification logic (LLM-as-judge)
+│   ├── verification_queue.py #   Async background queue (fire-and-forget)
+│   ├── dashboard_data.py     #   SQL queries for dashboard + /v1/stats
+│   ├── hardware_profile.py   #   Hardware detection → recommends Ollama models
+│   ├── ollama.py             #   Ollama backend adapter
+│   ├── github_models.py      #   GitHub Models (Copilot) backend adapter
+│   ├── claude.py             #   Anthropic Claude backend adapter
+│   ├── routing.yaml          #   Live-editable routing policy
+│   ├── models_by_hardware.yaml  # Hardware size → recommended model mapping
+│   └── prompts/
+│       └── router_classify.txt  # Few-shot classification prompt (versioned)
+├── dashboard.py              # Streamlit entrypoint (must stay at root for Streamlit)
+├── scripts/
+│   ├── check_models.py       # Utility to verify Ollama models are available
+│   └── load_test.py          # 500-prompt load test + savings report
 ├── tests/
+│   ├── test_smoke.py         # Budget, routing, and API smoke tests
 │   ├── test_router_accuracy.py  # Router tier accuracy against labeled dataset
 │   └── test_verifier.py         # Verifier unit tests
-├── test_smoke.py             # Budget, routing, and API smoke tests
+├── docs/
+│   └── engineering_journal.md   # Design decisions and trade-offs per phase
 ├── data/
-│   └── autopilot.db          # SQLite — request log, budget, verification log
+│   └── routing_dataset.jsonl    # Labeled prompts for router evaluation
 ├── Dockerfile
-└── docker-compose.yml
+├── docker-compose.yml
+└── pyproject.toml
 ```
 
 ---
@@ -344,7 +347,7 @@ LLM_Cost_Autopilot/
 pip install -e ".[dev]"
 
 # Run smoke tests (no live backends required)
-pytest test_smoke.py -v
+pytest tests/test_smoke.py -v
 
 # Run router accuracy evaluation (requires Ollama running)
 pytest tests/test_router_accuracy.py -v -s --timeout=300
@@ -353,7 +356,7 @@ pytest tests/test_router_accuracy.py -v -s --timeout=300
 pytest tests/test_verifier.py -v
 
 # Dry-run the load test (validates prompts, no API calls)
-python load_test.py --dry-run --count 500
+python scripts/load_test.py --dry-run --count 500
 ```
 
 ---

@@ -18,9 +18,9 @@ The autopilot's mission: **maximise free local inference, and when it must escal
 
 **Decision: hardware detection at setup time, not runtime.**
 
-The router model and Tier-1 generator are chosen based on available RAM/VRAM. Rather than hardcoding models, `hardware_profile.py` runs once and writes a profile that the registry reads at startup. This means the same codebase adapts to different machines automatically.
+The router model and Tier-1 generator are chosen based on available RAM/VRAM. Rather than hardcoding models, `src/autopilot/hardware_profile.py` runs once and writes a profile that the registry reads at startup. This means the same codebase adapts to different machines automatically.
 
-**Sizing rule:** a 4-bit quantised model needs roughly `params_in_billions × 0.7 GB` for weights, plus ~3–4 GB for KV cache and OS headroom. The profiler picks the largest model that fits with a safety margin and falls back to a tiny model if resources are tight. Model list is in `models_by_hardware.yaml` (not code) so it can be updated as better small models are released.
+**Sizing rule:** a 4-bit quantised model needs roughly `params_in_billions × 0.7 GB` for weights, plus ~3–4 GB for KV cache and OS headroom. The profiler picks the largest model that fits with a safety margin and falls back to a tiny model if resources are tight. Model list is in `src/autopilot/models_by_hardware.yaml` (not code) so it can be updated as better small models are released.
 
 ---
 
@@ -89,7 +89,7 @@ The dashboard queries are straightforward aggregations (spend by month, routing 
 
 The Streamlit dashboard runs as a separate process (separate Docker service) that reads directly from the same SQLite file. It doesn't import `api.py` — clean separation of concerns.
 
-`pages/1_Playground.py` adds an interactive prompt tester that calls the live API and shows the full routing metadata in real time. Useful for demos.
+`dashboard.py` at the repo root is the Streamlit entrypoint (Streamlit requires it there); it imports from the `autopilot` package in `src/`. The playground tab lives inline in `dashboard.py` rather than as a separate `pages/` file, so the whole UI ships as one file.
 
 ---
 
@@ -101,14 +101,14 @@ The Streamlit dashboard runs as a separate process (separate Docker service) tha
 
 **Decision: `PUT /v1/routing-config` writes to disk.**
 
-When the API updates thresholds, it writes the change back to `routing.yaml`. This means the file stays the single source of truth even after a container restart. The alternative (in-memory only) would silently lose threshold changes on restart.
+When the API updates thresholds, it writes the change back to `src/autopilot/routing.yaml`. This means the file stays the single source of truth even after a container restart. The alternative (in-memory only) would silently lose threshold changes on restart.
 
 **Endpoints:**
 - `POST /v1/completions` — full pipeline: classify → resolve → send → verify (async)
 - `GET /v1/models` — registered backends with pool and quality tier
 - `GET /v1/stats` — live budget snapshot + headline savings metrics
 - `PUT /v1/routing-config` — partial threshold update, live-reloads registry
-- `POST /v1/routing-config/reload` — hot-reload `routing.yaml` after hand edits
+- `POST /v1/routing-config/reload` — hot-reload `src/autopilot/routing.yaml` after hand edits
 - `GET /health` — Docker healthcheck
 
 ---
@@ -150,5 +150,5 @@ Items deferred from Phase 5 that block real use:
 | SSE streaming for `/v1/completions` | Adds complexity; buffered responses are fine for the current use case |
 | Versioned DB migrations (Alembic) | The current `ALTER TABLE` migration hack is fragile at scale, but there's only one migration so far |
 | Monthly budget-reset pre-notification | Nice-to-have; webhook alert covers the critical case |
-| Sprint 4: proper test suite | `test_smoke.py` covers the budget layer; router accuracy and verifier tests exist in `tests/` but integration tests against the full API are missing |
+| Sprint 4: proper test suite | `tests/test_smoke.py` covers the budget layer; router accuracy and verifier tests exist in `tests/` but integration tests against the full API are missing |
 | Embedding + logistic-regression router | The LLM router hits ≥82% accuracy; a second approach would make a good A/B comparison but isn't needed for the core product |
