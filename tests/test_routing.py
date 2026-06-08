@@ -1,16 +1,20 @@
 """
 tests/test_routing.py
 
-Sprint 4 — Test Coverage
+Sprint 4 — Test Coverage + Sprint 6 — Operational Polish
 
 Unit tests for resolve_backend (mocked BudgetState.snapshot) and integration
 tests for POST /v1/completions via httpx.AsyncClient(app=app).
+Sprint 6 adds: SSE streaming, versioned migration table, month-end notification.
 
 Run with: pytest tests/test_routing.py -v
 """
 from __future__ import annotations
 
 import asyncio
+import json
+import sqlite3
+from datetime import datetime as _real_datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -128,7 +132,7 @@ async def test_resolve_backend_tier3_copilot_when_confidence_below_threshold():
 @pytest.mark.asyncio
 async def test_resolve_backend_tier3_routes_to_claude_haiku():
     registry = _registry()
-    # confidence ≥ 4.5 and < 4.8 → claude_haiku
+    # confidence >= 4.5 and < 4.8 -> claude_haiku
     budget = _mock_budget(_snapshot(claude_remaining=15.0))
     cfg, reason = await resolve_backend(
         tier=3, confidence=4.6, budget=budget, registry=registry
@@ -140,7 +144,7 @@ async def test_resolve_backend_tier3_routes_to_claude_haiku():
 @pytest.mark.asyncio
 async def test_resolve_backend_tier3_routes_to_claude_sonnet():
     registry = _registry()
-    # confidence ≥ 4.8 → claude_sonnet
+    # confidence >= 4.8 -> claude_sonnet
     budget = _mock_budget(_snapshot(claude_remaining=15.0))
     cfg, reason = await resolve_backend(
         tier=3, confidence=4.9, budget=budget, registry=registry
@@ -181,7 +185,7 @@ async def test_resolve_backend_low_confidence_tier2_escalates_to_tier3():
 async def test_resolve_backend_copilot_exhausted_spills_to_claude():
     """When Copilot is low and Claude has budget, Tier 3 spills to Claude Haiku."""
     registry = _registry()
-    # copilot_remaining ≤ 30 triggers low-budget path
+    # copilot_remaining <= 30 triggers low-budget path
     budget = _mock_budget(_snapshot(claude_remaining=15.0, copilot_remaining=10.0))
     cfg, reason = await resolve_backend(
         tier=3, confidence=3.0, budget=budget, registry=registry
@@ -229,9 +233,9 @@ async def test_resolve_backend_tier1_copilot_pool_low_uses_free_fallback(tmp_pat
 
 @pytest.mark.asyncio
 async def test_resolve_backend_tier2_copilot_exhausted_both_exhausted():
-    """Both Tier 2 backends share COPILOT_PREMIUM — both unhealthy → budget_exhausted on primary."""
+    """Both Tier 2 backends share COPILOT_PREMIUM — both unhealthy -> budget_exhausted on primary."""
     registry = _registry()
-    # copilot_remaining=10 ≤ threshold 30 → both copilot_mid and copilot_top are unhealthy
+    # copilot_remaining=10 <= threshold 30 -> both copilot_mid and copilot_top are unhealthy
     budget = _mock_budget(_snapshot(copilot_remaining=10.0))
     cfg, reason = await resolve_backend(
         tier=2, confidence=4.0, budget=budget, registry=registry
@@ -437,3 +441,269 @@ async def test_auth_middleware_passes_correct_key(tmp_path, monkeypatch):
                 json={"messages": [{"role": "user", "content": "Hi"}]},
             )
     assert r.status_code == 200
+
+
+# ── Sprint 6: SSE streaming ────────────────────────────────────────────────────
+
+def _parse_sse(text: str) -> list[dict]:
+    """Return all parsed JSON objects from an SSE response body (skips [DONE])."""
+    events = []
+    for line in text.splitlines():
+        if line.startswith("data: ") and line[6:].strip() != "[DONE]":
+            events.append(json.loads(line[6:]))
+    return events
+
+
+@pytest.mark.asyncio
+async def test_streaming_emits_routing_chunks_done(tmp_path):
+    """stream:true returns text/event-stream with routing -> chunk(s) -> done."""
+    from autopilot.api import app
+
+    _make_app_state(tmp_path)
+    fake_cfg = _registry().get("copilot_mid")  # github_models provider
+
+    async def _fake_stream(messages, config, github_token, usage_out, timeout=60.0):
+        yield "Hello "
+        yield "world"
+        usage_out.update({"input_tokens": 10, "output_tokens": 2, "latency_ms": 120.0})
+
+    with (
+        patch("autopilot.api.route", new=AsyncMock(return_value=(fake_cfg, 2, 3.5, "primary"))),
+        patch("autopilot.api.github_models.send_stream", new=_fake_stream),
+    ):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/v1/completions",
+                json={"messages": [{"role": "user", "content": "Hi"}], "stream": True},
+            )
+
+    assert r.status_code == 200
+    assert "text/event-stream" in r.headers["content-type"]
+
+    events = _parse_sse(r.text)
+    event_types = [e["event"] for e in events]
+
+    assert event_types[0] == "routing"
+    assert "chunk" in event_types
+    assert event_types[-1] == "done"
+
+    assert events[0]["backend_id"] == "copilot_mid"
+    assert "".join(e["text"] for e in events if e["event"] == "chunk") == "Hello world"
+
+    done = events[-1]["routing"]
+    assert done["input_tokens"] == 10
+    assert done["output_tokens"] == 2
+    assert done["backend_id"] == "copilot_mid"
+
+
+@pytest.mark.asyncio
+async def test_streaming_records_spend_after_stream(tmp_path):
+    """Spend and audit log are written after the stream completes."""
+    from autopilot.api import app
+
+    _, budget = _make_app_state(tmp_path)
+    fake_cfg = _registry().get("copilot_mid")
+
+    async def _fake_stream(messages, config, github_token, usage_out, timeout=60.0):
+        yield "OK"
+        usage_out.update({"input_tokens": 5, "output_tokens": 1, "latency_ms": 50.0})
+
+    with (
+        patch("autopilot.api.route", new=AsyncMock(return_value=(fake_cfg, 2, 3.5, "primary"))),
+        patch("autopilot.api.github_models.send_stream", new=_fake_stream),
+    ):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            await client.post(
+                "/v1/completions",
+                json={"messages": [{"role": "user", "content": "Hi"}], "stream": True},
+            )
+
+    snap = await budget.snapshot()
+    assert snap.copilot_requests_used == 1.0  # premium_request_multiplier=1.0 for copilot_mid
+
+    conn = sqlite3.connect(tmp_path / "test.db")
+    rows = conn.execute("SELECT * FROM request_log").fetchall()
+    conn.close()
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_streaming_emits_error_event_on_provider_failure(tmp_path):
+    """If the provider generator raises, the client receives an error SSE event."""
+    from autopilot.api import app
+
+    _make_app_state(tmp_path)
+    fake_cfg = _registry().get("copilot_mid")
+
+    async def _failing_stream(messages, config, github_token, usage_out, timeout=60.0):
+        raise RuntimeError("upstream exploded")
+        yield  # make it a generator
+
+    with (
+        patch("autopilot.api.route", new=AsyncMock(return_value=(fake_cfg, 2, 3.5, "primary"))),
+        patch("autopilot.api.github_models.send_stream", new=_failing_stream),
+    ):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/v1/completions",
+                json={"messages": [{"role": "user", "content": "Hi"}], "stream": True},
+            )
+
+    assert r.status_code == 200  # HTTP layer is 200; error is carried in SSE body
+    events = _parse_sse(r.text)
+    assert any(e["event"] == "error" for e in events)
+
+
+# ── Sprint 6: versioned migration table ───────────────────────────────────────
+
+def test_migration_table_created_and_seeded(tmp_path):
+    """Fresh DB has schema_migrations table with 001 recorded."""
+    from autopilot.budget import BudgetState
+
+    BudgetState(tmp_path / "test.db")
+
+    conn = sqlite3.connect(tmp_path / "test.db")
+    names = [r[0] for r in conn.execute("SELECT name FROM schema_migrations").fetchall()]
+    conn.close()
+
+    assert "001_add_routing_reason" in names
+
+
+def test_migration_idempotent_on_reinit(tmp_path):
+    """Re-initialising on the same DB records each migration exactly once."""
+    from autopilot.budget import BudgetState
+
+    BudgetState(tmp_path / "test.db")
+    BudgetState(tmp_path / "test.db")  # second init on same file
+
+    conn = sqlite3.connect(tmp_path / "test.db")
+    count = conn.execute(
+        "SELECT COUNT(*) FROM schema_migrations WHERE name = '001_add_routing_reason'"
+    ).fetchone()[0]
+    conn.close()
+
+    assert count == 1
+
+
+def test_migration_handles_column_already_present(tmp_path):
+    """Fresh DB already has routing_reason column; second init must not raise."""
+    from autopilot.budget import BudgetState
+
+    # _SCHEMA creates routing_reason, so ALTER TABLE in the migration would fail
+    # with OperationalError if not guarded — this test catches that regression.
+    BudgetState(tmp_path / "test.db")
+    b2 = BudgetState(tmp_path / "test.db")
+    assert b2 is not None
+
+
+# ── Sprint 6: month-end pre-notification ──────────────────────────────────────
+
+class _FakeDatetime(_real_datetime):
+    """Subclass of datetime that returns a fixed value from now()."""
+    _fixed: "_real_datetime | None" = None
+
+    @classmethod
+    def now(cls, tz=None):
+        return cls._fixed or _real_datetime.now(tz)
+
+
+@pytest.mark.asyncio
+async def test_month_end_notification_fires_within_3_days(tmp_path):
+    """Notification fires when <= 3 days remain in the month and budget was used."""
+    from autopilot.budget import BudgetState, BudgetPool
+
+    budget = BudgetState(tmp_path / "test.db", alert_webhook_url="http://fake-webhook")
+    await budget.record_spend(BudgetPool.CLAUDE_CREDIT, cost_usd=5.0)
+
+    # June has 30 days; day 28 -> 2 days remaining -> should fire
+    _FakeDatetime._fixed = _real_datetime(2026, 6, 28)
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock()
+
+    with (
+        patch("autopilot.budget.datetime", _FakeDatetime),
+        patch("autopilot.budget.httpx.AsyncClient") as mock_cls,
+    ):
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        await budget.check_month_end_notification()
+
+    mock_client.post.assert_called_once()
+    payload = mock_client.post.call_args[1]["json"]
+    assert payload["event"] == "month_end_approaching"
+    assert payload["days_remaining"] == 2
+    assert payload["claude_spent_usd"] == 5.0
+
+
+@pytest.mark.asyncio
+async def test_month_end_notification_fires_only_once_per_month(tmp_path):
+    """Calling check twice in the same month fires the webhook exactly once."""
+    from autopilot.budget import BudgetState, BudgetPool
+
+    budget = BudgetState(tmp_path / "test.db", alert_webhook_url="http://fake-webhook")
+    await budget.record_spend(BudgetPool.CLAUDE_CREDIT, cost_usd=3.0)
+
+    _FakeDatetime._fixed = _real_datetime(2026, 6, 28)
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock()
+
+    with (
+        patch("autopilot.budget.datetime", _FakeDatetime),
+        patch("autopilot.budget.httpx.AsyncClient") as mock_cls,
+    ):
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        await budget.check_month_end_notification()
+        await budget.check_month_end_notification()  # second call same month
+
+    assert mock_client.post.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_month_end_notification_does_not_fire_mid_month(tmp_path):
+    """No notification when more than 3 days remain in the month."""
+    from autopilot.budget import BudgetState, BudgetPool
+
+    budget = BudgetState(tmp_path / "test.db", alert_webhook_url="http://fake-webhook")
+    await budget.record_spend(BudgetPool.CLAUDE_CREDIT, cost_usd=5.0)
+
+    _FakeDatetime._fixed = _real_datetime(2026, 6, 15)  # 15 days remaining
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock()
+
+    with (
+        patch("autopilot.budget.datetime", _FakeDatetime),
+        patch("autopilot.budget.httpx.AsyncClient") as mock_cls,
+    ):
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        await budget.check_month_end_notification()
+
+    mock_client.post.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_month_end_notification_silent_when_no_budget_used(tmp_path):
+    """No notification when both budget pools are at zero."""
+    from autopilot.budget import BudgetState
+
+    budget = BudgetState(tmp_path / "test.db", alert_webhook_url="http://fake-webhook")
+    # deliberately no spend recorded
+
+    _FakeDatetime._fixed = _real_datetime(2026, 6, 29)  # 1 day remaining
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock()
+
+    with (
+        patch("autopilot.budget.datetime", _FakeDatetime),
+        patch("autopilot.budget.httpx.AsyncClient") as mock_cls,
+    ):
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        await budget.check_month_end_notification()
+
+    mock_client.post.assert_not_called()

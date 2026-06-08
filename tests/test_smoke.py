@@ -45,7 +45,7 @@ def test_hardware_profiler_effective_memory_is_positive():
 def test_recommend_models_returns_valid_names(tmp_path):
     hw = profile_hardware()
     # Point at the real config file
-    config = Path(__file__).parents[1] / "config" / "models_by_hardware.yaml"
+    config = Path(__file__).parents[1] / "src" / "autopilot" / "models_by_hardware.yaml"
     models = recommend_models(hw, config_path=config)
     assert models.router_model, "Router model should not be empty"
     assert models.tier1_model, "Tier-1 model should not be empty"
@@ -175,8 +175,8 @@ async def test_send_request_ollama_mock(tmp_path):
         budget_pool=BudgetPool.FREE,
     )
 
-    with patch("autopilot.backends.ollama.send", new=AsyncMock(return_value=fake_response)):
-        resp = await send_request(
+    with patch("autopilot.ollama.send", new=AsyncMock(return_value=fake_response)):
+        resp, _ = await send_request(
             messages=[{"role": "user", "content": "Say OK"}],
             config=cfg,
             budget=budget,
@@ -217,7 +217,7 @@ async def test_send_request_records_copilot_spend(tmp_path):
         premium_requests_used=1.0,
     )
 
-    with patch("autopilot.backends.github_models.send", new=AsyncMock(return_value=fake_response)):
+    with patch("autopilot.github_models.send", new=AsyncMock(return_value=fake_response)):
         await send_request(
             messages=[{"role": "user", "content": "Say OK"}],
             config=cfg,
