@@ -119,6 +119,16 @@ Beyond the core routing logic, the service has been hardened across three sprint
 - **Generalised fallback** — any provider failure (Ollama, Copilot, or Claude) now attempts the tier's fallback backend, not just Ollama failures. Guards against retrying the same backend when primary and fallback coincide.
 - **Non-blocking SQLite** — `BudgetState` migrated from synchronous `sqlite3` to `aiosqlite`, removing the serialisation bottleneck under concurrent load.
 
+### Test coverage (Sprint 4)
+- **Unit tests for `resolve_backend`** — covers budget-exhaustion paths, low-confidence escalation, and all Tier-3 branching via `AsyncMock` snapshots; no live backends required.
+- **Integration tests via `ASGITransport`** — full `/v1/completions` path tested in-process: 200 golden path, fallback on provider error, 502 propagation, 422 input validation, and auth rejection.
+- **Parser unit tests** — `_parse_classification` tested against JSON, embedded JSON, regex fallback, garbage input, and out-of-range tier values.
+
+### Docker hardening (Sprint 5)
+- **Non-root container** — `Dockerfile` creates a locked-down `appuser` system account and switches to it before the process starts, eliminating root exposure.
+- **`HEALTHCHECK` in image** — Docker can probe `GET /health` directly on the image (not just via compose), so `docker ps` reports accurate health state and compose `depends_on: condition: service_healthy` gates work correctly.
+- **Named volume for SQLite** — `autopilot_data` is a Docker-managed named volume; data survives `docker-compose down` and container replacement without depending on a host-side `./data` folder.
+
 ---
 
 ## Setup
@@ -323,7 +333,8 @@ LLM_Cost_Autopilot/
 │   ├── check_models.py       # Utility to verify Ollama models are available
 │   └── load_test.py          # 500-prompt load test + savings report
 ├── tests/
-│   ├── test_smoke.py         # Budget, routing, and API smoke tests
+│   ├── test_smoke.py            # Budget, routing, and API smoke tests
+│   ├── test_routing.py          # Unit + integration tests (resolve_backend, API, parser)
 │   ├── test_router_accuracy.py  # Router tier accuracy against labeled dataset
 │   └── test_verifier.py         # Verifier unit tests
 ├── docs/
@@ -349,8 +360,8 @@ LLM_Cost_Autopilot/
 # Install in editable mode
 pip install -e ".[dev]"
 
-# Run smoke tests (no live backends required)
-pytest tests/test_smoke.py -v
+# Run all unit + integration tests (no live backends required)
+pytest tests/test_smoke.py tests/test_routing.py -v
 
 # Run router accuracy evaluation (requires Ollama running)
 pytest tests/test_router_accuracy.py -v -s --timeout=300
