@@ -133,21 +133,32 @@ def resolve_backend(
     confidence: float,
     budget: BudgetState,
     registry: ModelRegistry,
-) -> ModelConfig:
+) -> tuple[ModelConfig, str]:
     """
     Map (tier, confidence) to a concrete ModelConfig, applying:
       1. Low-confidence escalation  — if confidence < policy minimum, bump tier up.
       2. Tier-3 Claude reservation  — confidence ≥ claude_reserve_threshold → Claude.
       3. Budget guardrails          — if the preferred pool is exhausted, fall back.
+
+    Returns (ModelConfig, routing_reason) where routing_reason is one of:
+      "primary"                  — normal path, primary backend for the resolved tier
+      "low_confidence"           — bumped one tier up because confidence was too low
+      "claude_reserve_threshold" — Tier 3 sent to Claude (confidence ≥ cutoff)
+      "budget_spill_to_claude"   — Copilot pool low; spilled to Claude
+      "budget_exhausted"         — both pools low; best-effort choice
+      "fallback"                 — primary pool low; using fallback backend
     """
     snapshot: BudgetSnapshot = budget.snapshot()
     policy = registry.tier_policy(tier)
     thresholds = registry.low_budget_thresholds
 
+    reason = "primary"
+
     # Low-confidence escalation: bump to the next tier
     if confidence < policy.get("confidence_min", 3) and tier < 3:
         tier += 1
         policy = registry.tier_policy(tier)
+        reason = "low_confidence"
 
     # Tier 3: check if this should go to Claude instead of Copilot top
     if tier == 3:
@@ -165,30 +176,26 @@ def resolve_backend(
         )
 
         if confidence >= claude_cutoff and not claude_low:
-            return claude_cfg
+            return claude_cfg, "claude_reserve_threshold"
         if copilot_low and not claude_low:
-            # Copilot exhausted — spill to Claude
-            return claude_cfg
+            return claude_cfg, "budget_spill_to_claude"
         if copilot_low and claude_low:
-            # Both low — best effort with whatever is less depleted
             if snapshot.copilot_remaining_requests > 0:
-                return copilot_top_cfg
-            return claude_cfg
-        return copilot_top_cfg
+                return copilot_top_cfg, "budget_exhausted"
+            return claude_cfg, "budget_exhausted"
+        return copilot_top_cfg, reason
 
     # Tier 1 or 2 — use primary unless its pool is exhausted
     primary = registry.primary_backend(tier)
     fallback = registry.fallback_backend(tier)
 
     if _pool_is_healthy(primary.budget_pool, snapshot, thresholds):
-        return primary
+        return primary, reason
 
-    # Primary pool is low — try the fallback
     if _pool_is_healthy(fallback.budget_pool, snapshot, thresholds):
-        return fallback
+        return fallback, "fallback"
 
-    # Both exhausted — return primary anyway (best effort)
-    return primary
+    return primary, "budget_exhausted"
 
 
 def _pool_is_healthy(
@@ -218,10 +225,10 @@ async def route(
     budget: BudgetState,
     registry: ModelRegistry,
     settings: AutopilotSettings,
-) -> tuple[ModelConfig, int, float]:
+) -> tuple[ModelConfig, int, float, str]:
     """
     Full routing pipeline: classify then resolve.
-    Returns (selected_backend_config, tier, confidence).
+    Returns (selected_backend_config, tier, confidence, routing_reason).
     """
     router_cfg = registry.router_config()
 
@@ -231,14 +238,14 @@ async def route(
         settings=settings,
     )
 
-    selected = resolve_backend(
+    selected, reason = resolve_backend(
         tier=tier,
         confidence=confidence,
         budget=budget,
         registry=registry,
     )
 
-    return selected, tier, confidence
+    return selected, tier, confidence, reason
 
 
 # ── Offline dataset evaluation (Phase 2 deliverable) ─────────────────────────

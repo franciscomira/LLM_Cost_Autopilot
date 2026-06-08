@@ -1,0 +1,118 @@
+version: "3.9"
+
+# LLM Cost Autopilot — docker-compose
+#
+# Services:
+#   ollama-init  — one-shot: pulls the router + Tier-1 models then exits
+#   ollama       — local LLM backend (Tier 1 inference + router model)
+#   api          — FastAPI router (POST /v1/completions + stats/config endpoints)
+#   dashboard    — Streamlit dashboard (read-only, shares the SQLite volume)
+#
+# First-time setup:
+#   1. Copy .env.example → .env and fill in GITHUB_TOKEN / ANTHROPIC_API_KEY
+#   2. Set OLLAMA_ROUTER_MODEL and OLLAMA_TIER1_MODEL below (or in .env) to
+#      match what hardware_profile.py recommended for your machine.
+#   3. docker-compose up
+#
+# Required env vars:
+#   GITHUB_TOKEN            — PAT with models:read for GitHub Models
+#   ANTHROPIC_API_KEY       — only when USE_CLAUDE_SUBSCRIPTION=false
+#   USE_CLAUDE_SUBSCRIPTION — set "true" to use Claude Pro SDK credit
+#
+# Optional env vars (have defaults):
+#   OLLAMA_ROUTER_MODEL     — model pulled for routing (default: phi3:mini)
+#   OLLAMA_TIER1_MODEL      — model pulled for Tier-1 generation (default: phi3:mini)
+
+x-ollama-models: &ollama-models
+  OLLAMA_ROUTER_MODEL: ${OLLAMA_ROUTER_MODEL:-phi3:mini}
+  OLLAMA_TIER1_MODEL: ${OLLAMA_TIER1_MODEL:-phi3:mini}
+
+services:
+
+  # ── One-shot model puller ─────────────────────────────────────────────────────
+  # Pulls both models on first run (or when the image is updated).
+  # Exits with code 0 once done; the api service waits for it via depends_on.
+  ollama-init:
+    image: ollama/ollama:latest
+    environment:
+      <<: *ollama-models
+      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - ollama_models:/root/.ollama
+    entrypoint: >
+      /bin/sh -c "
+        echo 'Waiting for Ollama to be ready...';
+        until curl -sf http://ollama:11434/api/tags > /dev/null; do sleep 2; done;
+        echo 'Pulling router model: '$$OLLAMA_ROUTER_MODEL;
+        ollama pull $$OLLAMA_ROUTER_MODEL;
+        echo 'Pulling Tier-1 model: '$$OLLAMA_TIER1_MODEL;
+        ollama pull $$OLLAMA_TIER1_MODEL;
+        echo 'Models ready.';
+      "
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"   # init container — run once and exit
+
+  # ── Local LLM backend ─────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ── FastAPI router ─────────────────────────────────────────────────────────────
+  api:
+    build: .
+    image: llm-cost-autopilot:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - DB_PATH=/app/data/autopilot.db
+    volumes:
+      - ./data:/app/data           # SQLite persistence
+      - ./routing.yaml:/app/routing.yaml  # live config — PUT /v1/routing-config updates this
+    depends_on:
+      ollama-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── Streamlit dashboard ────────────────────────────────────────────────────────
+  dashboard:
+    image: llm-cost-autopilot:latest
+    command: >
+      streamlit run dashboard.py
+      --server.port 8501
+      --server.address 0.0.0.0
+      --server.headless true
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - DB_PATH=/app/data/autopilot.db
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  ollama_models:

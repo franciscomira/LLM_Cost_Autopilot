@@ -170,18 +170,33 @@ reconcile with the logs.
 
 ---
 
-## Phase 5 — Expose as an API (Day 11–13)
+## Phase 5 — Expose as an API ✅ DONE (2026-06-08)
 
-1. **FastAPI service** — `POST /v1/completions` accepts a standard chat request; the
-   **router** chooses the backend (caller doesn't). Response includes metadata: which
-   backend was chosen and why (tier + confidence + budget reason).
-2. **Config endpoints** — `GET /v1/models` (backends + budget pools), `GET /v1/stats`
-   (savings + budget burn-down), `PUT /v1/routing-config` (update thresholds without
-   redeploy).
-3. **Containerize** — `docker-compose`: api + background verification worker + Ollama
-   + SQLite volume. Document env vars (Copilot auth, Claude auth, sampling %, thresholds).
+### What was built
 
-**Done when:** `docker-compose up` gives a working router API with the dashboard live.
+| File | Purpose |
+|---|---|
+| `api.py` | FastAPI app with lifespan-managed singletons |
+| `Dockerfile` | Python 3.11-slim image; mounts `data/` + `routing.yaml` |
+| `docker-compose.yml` | Three services: `api`, `dashboard`, `ollama` |
+
+**Endpoints delivered:**
+- `POST /v1/completions` — full pipeline: classify → resolve → send → queue verification. Response carries `routing` metadata block (tier, confidence, backend, pool, cost, latency).
+- `GET /v1/models` — all registered backends with pool + quality tier.
+- `GET /v1/stats` — live budget snapshot + headline savings from `dashboard_data.py`.
+- `PUT /v1/routing-config` — partial update of `routing.yaml` thresholds (budgets, low-budget floors, sample rate, `claude_reserve_threshold`). Reloads registry in-process; no redeploy needed.
+- `GET /health` — Docker healthcheck.
+
+**Architecture decisions made:**
+- All singletons (`BudgetState`, `ModelRegistry`, `VerificationQueue`) live on a module-level `_AppState` object, initialised in the FastAPI `lifespan` context manager. This keeps them off global scope while surviving across requests.
+- `PUT /v1/routing-config` writes directly to `routing.yaml` on disk, so the file stays the single source of truth even if the container restarts. The `ModelRegistry` is swapped atomically on the `_state` object; no lock is needed because Python's GIL makes the reassignment atomic for the dict-backed singletons we have.
+- The dashboard runs as a separate compose service sharing the same SQLite volume — it is read-only from the data perspective and doesn't need to import `api.py`.
+- Verification is fire-and-forget: `vq.enqueue(job)` never blocks the HTTP response. If the queue is full (>256 items) the job is silently dropped — correct behaviour for a budget-protection system where a flooded verifier would itself burn budget.
+
+**Known limitations / deferred:**
+- Streaming (`stream: true`) is accepted in the schema but ignored — all responses are buffered. Add SSE in a follow-up if needed.
+- `PUT /v1/routing-config` rewrites the entire YAML file on each call; fine at this scale, but a concurrent write race is possible under load. Not a problem until the service is truly multi-process.
+- The `docker-compose.yml` does not pull Ollama models automatically. After first `docker-compose up`, run: `docker exec <ollama-container> ollama pull <model>` for both the router and Tier-1 models.
 
 ---
 
@@ -200,14 +215,56 @@ reconcile with the logs.
 
 ---
 
-## Open decisions to make as you go
-- **Claude dev path before June 15:** temporary API key, or build Claude last?
-- **Optional second router** (embedding + sklearn) for the comparison story — yes/no?
-- **Copilot models:** which model is your Tier-2 workhorse vs. your Tier-3 default top
-  model (check what your Pro+ plan exposes and the premium-request multipliers).
-- **"Reserve Claude" cutoff:** the complexity score above which Tier 3 goes to Claude
-  instead of Copilot's top model.
-- **Sampling rate** for verification (start 10%, tune against budget burn).
+## Architect's improvement notes
+
+These are not blockers for Phase 6 but are worth doing before calling the project finished.
+Ranked by impact-to-effort ratio.
+
+### 1. Add a `POST /v1/routing-config/reload` endpoint (high value, 15 min)
+Right now `PUT /v1/routing-config` only accepts the specific fields defined in
+`RoutingConfigUpdate`. If you hand-edit `routing.yaml` (e.g. to swap a backend model),
+those changes are invisible until the container restarts. A bare `POST /v1/routing-config/reload`
+that just calls `ModelRegistry(ROUTING_YAML)` and swaps `_state.registry` gives you
+a full hot-reload escape hatch for free.
+
+### 2. Make the SQLite path configurable via env var (medium value, 10 min)
+`api.py` currently hard-codes `_DB_PATH = _ROOT / "data" / "autopilot.db"`. The
+`docker-compose.yml` passes `DB_PATH=/app/data/autopilot.db` as an env var but nothing
+reads it. Wire `os.environ.get("DB_PATH", str(_DB_PATH))` so the path is actually
+overridable — this matters if you ever run two api instances pointing at different
+databases (e.g. a test environment).
+
+### 3. Expose escalation reason in the routing metadata (medium value, 20 min)
+The `RoutingMeta` response tells the caller *which* backend was chosen but not *why* it
+was escalated. A `routing_reason` string field (`"low_confidence"`, `"budget_spill"`,
+`"claude_reserve_threshold"`, `"primary"`) would make the logs and the dashboard much
+more actionable and is a strong portfolio talking point — it shows the system is
+self-aware about its routing decisions.
+
+### 4. Add an Ollama model-pull step to docker-compose (low effort, high friction saved)
+The current `ollama` service starts Ollama but leaves models un-pulled. A small
+`ollama-init` init-container that runs `ollama pull <router_model> && ollama pull
+<tier1_model>` (reading model names from env vars that mirror `routing.yaml`) makes
+`docker-compose up` a true one-command setup. Without it, first-time users hit a
+confusing 404 from the Ollama backend.
+
+### 5. Guard `PUT /v1/routing-config` with a write lock (low value now, good hygiene)
+Two concurrent PUT requests could interleave YAML reads and writes, producing a
+corrupted file. Add an `asyncio.Lock` on `_AppState` and acquire it inside the
+endpoint. One line of setup, one `async with` in the handler — negligible overhead,
+eliminates the race entirely.
+
+---
+
+## Open decisions — status
+
+| Decision | Status |
+|---|---|
+| Claude dev path (API key vs. subscription) | Resolved: Anthropic API key via `ANTHROPIC_API_KEY`; flip `USE_CLAUDE_SUBSCRIPTION=true` on June 15 |
+| Optional second router (embedding + sklearn) | Deferred — build after Phase 6 load test if time allows |
+| Copilot models (Tier 2 vs Tier 3) | Set: `gpt-4o-mini` (Tier 2), `gpt-4o` (Tier 3 default) |
+| "Reserve Claude" cutoff | Set: confidence ≥ 4.5 on Tier-3 → Claude |
+| Verification sampling rate | Set: 10% + always-verify below confidence 3 |
 
 ## Watch-outs
 - Claude Pro Agent SDK credit is **$20/mo, no rollover, API-rate metered** — small.
