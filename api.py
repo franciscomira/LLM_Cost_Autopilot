@@ -31,7 +31,8 @@ from typing import Any
 
 import yaml
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from budget import BudgetState
@@ -44,6 +45,12 @@ from verification_queue import VerificationQueue
 from verifier import VerificationJob, should_verify
 
 load_dotenv()
+
+# ── Auth ───────────────────────────────────────────────────────────────────────
+
+# Set API_KEY in your .env to require X-API-Key on all /v1/* requests.
+# If unset, auth is disabled (useful for local development only).
+_API_KEY = os.environ.get("API_KEY", "")
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
@@ -110,15 +117,28 @@ app = FastAPI(
 )
 
 
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    if _API_KEY and request.url.path.startswith("/v1/"):
+        key = request.headers.get("X-API-Key", "")
+        if key != _API_KEY:
+            return JSONResponse(status_code=401, content={"detail": "Invalid or missing X-API-Key"})
+    return await call_next(request)
+
+
 # ── Schemas ────────────────────────────────────────────────────────────────────
+
+_MAX_CONTENT_CHARS = 32_000   # ~8 k tokens; prevents runaway Claude spend
+_MAX_MESSAGES = 50
+
 
 class Message(BaseModel):
     role: str
-    content: str
+    content: str = Field(..., max_length=_MAX_CONTENT_CHARS)
 
 
 class CompletionRequest(BaseModel):
-    messages: list[Message] = Field(..., min_length=1)
+    messages: list[Message] = Field(..., min_length=1, max_length=_MAX_MESSAGES)
     stream: bool = False  # reserved; streaming not yet implemented
 
 
