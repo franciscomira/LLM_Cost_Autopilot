@@ -9,13 +9,19 @@ healthy enough to route to. This module also writes spend after each call.
 """
 from __future__ import annotations
 
+import json
+import logging
+import os
 import sqlite3
+import urllib.request
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Generator
 
 from models import BudgetPool, BudgetSnapshot
+
+logger = logging.getLogger(__name__)
 
 
 # ── Schema ─────────────────────────────────────────────────────────────────────
@@ -79,11 +85,20 @@ class BudgetState:
         db_path: str | Path,
         claude_monthly_limit_usd: float = 20.0,
         copilot_monthly_requests_limit: float = 300.0,
+        alert_webhook_url: str = "",
+        alert_threshold_usd: float | None = None,
     ) -> None:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.claude_limit = claude_monthly_limit_usd
         self.copilot_limit = copilot_monthly_requests_limit
+        # Webhook fired when Claude USD spend crosses the threshold.
+        # Defaults come from env vars so docker-compose can set them without code changes.
+        self._alert_webhook_url = alert_webhook_url or os.environ.get("BUDGET_ALERT_WEBHOOK_URL", "")
+        raw_threshold = alert_threshold_usd or float(os.environ.get("BUDGET_ALERT_THRESHOLD_USD", "0"))
+        self._alert_threshold_usd = raw_threshold if raw_threshold > 0 else None
+        # Track the spend at which we last fired an alert so we don't spam.
+        self._last_alert_fired_at_usd: float | None = None
         self._init_db()
 
     # ── Internal helpers ───────────────────────────────────────────────────────
@@ -137,6 +152,33 @@ class BudgetState:
             month_key=month,
         )
 
+    def _fire_alert(self, spent_usd: float, limit_usd: float) -> None:
+        """POST a JSON alert to the configured webhook URL."""
+        if not self._alert_webhook_url:
+            return
+        payload = json.dumps({
+            "event": "budget_threshold_crossed",
+            "claude_spent_usd": round(spent_usd, 4),
+            "claude_limit_usd": limit_usd,
+            "month": self._month_key(),
+        }).encode()
+        try:
+            req = urllib.request.Request(
+                self._alert_webhook_url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5):
+                pass
+            self._last_alert_fired_at_usd = spent_usd
+            logger.warning(
+                "budget alert fired",
+                extra={"claude_spent_usd": spent_usd, "threshold_usd": self._alert_threshold_usd},
+            )
+        except Exception as exc:
+            logger.error("budget alert webhook failed", extra={"error": str(exc)})
+
     def record_spend(
         self,
         pool: BudgetPool,
@@ -153,6 +195,15 @@ class BudgetState:
                     "last_updated = ? WHERE month_key = ?",
                     (cost_usd, datetime.now().isoformat(), month),
                 )
+                # Check alert threshold after updating spend
+                if self._alert_threshold_usd is not None:
+                    row = conn.execute(
+                        "SELECT claude_spent_usd FROM budget WHERE month_key = ?", (month,)
+                    ).fetchone()
+                    new_spent = row["claude_spent_usd"] if row else 0.0
+                    prev_alert = self._last_alert_fired_at_usd or 0.0
+                    if new_spent >= self._alert_threshold_usd > prev_alert:
+                        self._fire_alert(new_spent, self.claude_limit)
             elif pool == BudgetPool.COPILOT_PREMIUM:
                 conn.execute(
                     "UPDATE budget SET copilot_requests = copilot_requests + ?, "

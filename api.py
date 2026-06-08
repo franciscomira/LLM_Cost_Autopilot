@@ -24,7 +24,9 @@ Env vars (all optional, have defaults):
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -34,6 +36,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+
+from logging_config import REQUEST_ID, configure_logging
 
 from budget import BudgetState
 from dashboard_data import get_headline_metrics
@@ -45,6 +49,9 @@ from verification_queue import VerificationQueue
 from verifier import VerificationJob, should_verify
 
 load_dotenv()
+
+configure_logging(level=os.environ.get("LOG_LEVEL", "INFO"))
+logger = logging.getLogger(__name__)
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
 
@@ -118,12 +125,23 @@ app = FastAPI(
 
 
 @app.middleware("http")
-async def api_key_middleware(request: Request, call_next):
+async def request_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
+    REQUEST_ID.set(request_id)
+
     if _API_KEY and request.url.path.startswith("/v1/"):
         key = request.headers.get("X-API-Key", "")
         if key != _API_KEY:
-            return JSONResponse(status_code=401, content={"detail": "Invalid or missing X-API-Key"})
-    return await call_next(request)
+            logger.warning("unauthorized request", extra={"path": request.url.path})
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or missing X-API-Key"},
+                headers={"X-Request-Id": request_id},
+            )
+
+    response = await call_next(request)
+    response.headers["X-Request-Id"] = request_id
+    return response
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
@@ -254,6 +272,18 @@ async def completions(req: CompletionRequest):
             confidence=confidence,
         )
         _state.vq.enqueue(job)
+
+    logger.info(
+        "completion served",
+        extra={
+            "backend_id": response.backend_id,
+            "provider": selected_config.provider,
+            "tier": tier,
+            "cost_usd": response.cost_usd,
+            "latency_ms": round(response.latency_ms, 1),
+            "routing_reason": routing_reason,
+        },
+    )
 
     return CompletionResponse(
         text=response.text,
