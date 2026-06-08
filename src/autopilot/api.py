@@ -12,7 +12,7 @@ Endpoints:
   GET  /health                      — Docker healthcheck
 
 Start with:
-  uvicorn api:app --host 0.0.0.0 --port 8000
+  uvicorn autopilot.api:app --host 0.0.0.0 --port 8000
 
 Env vars (all optional, have defaults):
   DB_PATH                   — path to SQLite database (default: ./data/autopilot.db)
@@ -37,16 +37,16 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from logging_config import REQUEST_ID, configure_logging
+from autopilot.logging_config import REQUEST_ID, configure_logging
 
-from budget import BudgetState
-from dashboard_data import get_headline_metrics
-from hardware_profile import profile_hardware, recommend_models
-from interface import AutopilotSettings, send_request
-from registry import ModelRegistry
-from router import route
-from verification_queue import VerificationQueue
-from verifier import VerificationJob, should_verify
+from autopilot.budget import BudgetState
+from autopilot.dashboard_data import get_headline_metrics
+from autopilot.hardware_profile import profile_hardware, recommend_models
+from autopilot.interface import AutopilotSettings, send_request
+from autopilot.registry import ModelRegistry
+from autopilot.router import route
+from autopilot.verification_queue import VerificationQueue
+from autopilot.verifier import VerificationJob, should_verify
 
 load_dotenv()
 
@@ -64,7 +64,7 @@ _API_KEY = os.environ.get("API_KEY", "")
 _ROOT = Path(__file__).parent
 _ROUTING_YAML = _ROOT / "routing.yaml"
 # DB_PATH env var lets docker-compose (or tests) override the database location.
-_DB_PATH = Path(os.environ.get("DB_PATH", str(_ROOT / "data" / "autopilot.db")))
+_DB_PATH = Path(os.environ.get("DB_PATH", str(_ROOT.parent.parent / "data" / "autopilot.db")))
 
 
 # ── App-level singletons ───────────────────────────────────────────────────────

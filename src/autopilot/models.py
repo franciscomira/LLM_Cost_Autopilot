@@ -84,4 +84,3 @@ class BudgetSnapshot:
     @property
     def copilot_remaining_requests(self) -> float:
         return max(0.0, self.copilot_requests_limit - self.copilot_requests_used)
-

@@ -21,10 +21,10 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 
-from budget import BudgetState
-from interface import AutopilotSettings
-from registry import ModelRegistry
-from verifier import VerificationJob, VerificationResult, run_verification_job
+from autopilot.budget import BudgetState
+from autopilot.interface import AutopilotSettings
+from autopilot.registry import ModelRegistry
+from autopilot.verifier import VerificationJob, VerificationResult, run_verification_job
 
 log = logging.getLogger(__name__)
 

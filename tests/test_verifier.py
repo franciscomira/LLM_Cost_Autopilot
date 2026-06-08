@@ -15,8 +15,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from models import BudgetPool, Response
-from verifier import (
+from autopilot.models import BudgetPool, Response
+from autopilot.verifier import (
     VerificationJob,
     _append_training_example,
     _corrected_tier,
@@ -165,11 +165,11 @@ def test_verification_job_live() -> None:
     Runs a single verification job against live backends.
     Checks that a deliberately weak response gets flagged as a mis-route.
     """
-    from budget import BudgetState
-    from hardware_profile import profile_hardware, recommend_models
-    from interface import AutopilotSettings
-    from registry import ModelRegistry
-    from verifier import run_verification_job
+    from autopilot.budget import BudgetState
+    from autopilot.hardware_profile import profile_hardware, recommend_models
+    from autopilot.interface import AutopilotSettings
+    from autopilot.registry import ModelRegistry
+    from autopilot.verifier import run_verification_job
 
     settings = AutopilotSettings.from_env()
     hw = profile_hardware()

@@ -1,5 +1,5 @@
 """
-src/autopilot/backends/claude.py
+src/autopilot/claude.py
 
 Calls the Anthropic API using the standard `anthropic` Python SDK.
 This is the Tier-3 reserved backend — used only for the hardest requests.
@@ -13,7 +13,7 @@ import time
 
 import anthropic
 
-from models import BudgetPool, ModelConfig, Response
+from autopilot.models import BudgetPool, ModelConfig, Response
 
 
 def _build_client() -> anthropic.Anthropic:

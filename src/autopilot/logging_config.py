@@ -4,7 +4,7 @@ logging_config.py
 Structured JSON logging + per-request correlation ID.
 
 Usage in api.py:
-    from logging_config import configure_logging, REQUEST_ID
+    from autopilot.logging_config import configure_logging, REQUEST_ID
     configure_logging()
 
 Usage in any module:

@@ -12,8 +12,8 @@ from pathlib import Path
 
 import yaml
 
-from hardware_profile import HardwareProfile, RecommendedModels
-from models import BudgetPool, ModelConfig, QualityTier
+from autopilot.hardware_profile import HardwareProfile, RecommendedModels
+from autopilot.models import BudgetPool, ModelConfig, QualityTier
 
 
 # ── Tier → quality mapping ─────────────────────────────────────────────────────

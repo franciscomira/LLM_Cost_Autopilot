@@ -1,5 +1,5 @@
 """
-src/autopilot/backends/ollama.py
+src/autopilot/ollama.py
 
 Async wrapper around Ollama's OpenAI-compatible HTTP endpoint.
 Works for both the router model (classification) and the Tier-1 generator.
@@ -14,7 +14,7 @@ from typing import Any
 
 import httpx
 
-from models import BudgetPool, ModelConfig, Response
+from autopilot.models import BudgetPool, ModelConfig, Response
 
 
 _DEFAULT_BASE_URL = "http://localhost:11434"

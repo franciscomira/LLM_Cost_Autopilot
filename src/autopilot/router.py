@@ -26,10 +26,10 @@ from pathlib import Path
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from budget import BudgetState
-from models import BudgetPool, BudgetSnapshot, ModelConfig
-from registry import ModelRegistry
-from interface import AutopilotSettings
+from autopilot.budget import BudgetState
+from autopilot.models import BudgetPool, BudgetSnapshot, ModelConfig
+from autopilot.registry import ModelRegistry
+from autopilot.interface import AutopilotSettings
 
 
 # ── Prompt template ────────────────────────────────────────────────────────────

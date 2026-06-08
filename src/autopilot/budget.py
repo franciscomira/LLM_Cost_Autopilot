@@ -25,7 +25,7 @@ from typing import AsyncGenerator
 import aiosqlite
 import httpx
 
-from models import BudgetPool, BudgetSnapshot
+from autopilot.models import BudgetPool, BudgetSnapshot
 
 logger = logging.getLogger(__name__)
 

@@ -68,10 +68,10 @@ def test_router_accuracy() -> None:
     Runs the held-out evaluation set through the live Ollama router.
     Asserts >= 80% tier accuracy and prints the confusion matrix.
     """
-    from router import classify_prompt
-    from registry import ModelRegistry
-    from interface import AutopilotSettings
-    from hardware_profile import profile_hardware, recommend_models
+    from autopilot.router import classify_prompt
+    from autopilot.registry import ModelRegistry
+    from autopilot.interface import AutopilotSettings
+    from autopilot.hardware_profile import profile_hardware, recommend_models
 
     settings = AutopilotSettings.from_env()
     hw = profile_hardware()

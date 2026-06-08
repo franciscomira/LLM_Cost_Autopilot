@@ -82,7 +82,7 @@ services:
       - DB_PATH=/app/data/autopilot.db
     volumes:
       - ./data:/app/data           # SQLite persistence
-      - ./routing.yaml:/app/routing.yaml  # live config — PUT /v1/routing-config updates this
+      - ./src/autopilot/routing.yaml:/app/src/autopilot/routing.yaml  # live config — PUT /v1/routing-config updates this
     depends_on:
       ollama-init:
         condition: service_completed_successfully

@@ -36,7 +36,7 @@ from autopilot.budget import BudgetState
 from autopilot.hardware_profile import profile_hardware, recommend_models
 from autopilot.interface import AutopilotSettings, smoke_test_all_backends
 from autopilot.registry import ModelRegistry
-from autopilot.backends.ollama import list_local_models, pull_model
+from autopilot.ollama import list_local_models, pull_model
 
 console = Console()
 load_dotenv()

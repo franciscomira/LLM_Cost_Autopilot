@@ -1,5 +1,5 @@
 """
-src/autopilot/backends/github_models.py
+src/autopilot/github_models.py
 
 Calls the GitHub Models inference API — an OpenAI-compatible endpoint that
 is included with GitHub Copilot Pro/Pro+ subscriptions.
@@ -29,7 +29,7 @@ from typing import Any
 
 import httpx
 
-from models import BudgetPool, ModelConfig, Response
+from autopilot.models import BudgetPool, ModelConfig, Response
 
 
 _GITHUB_MODELS_URL = "https://models.inference.ai.azure.com/chat/completions"

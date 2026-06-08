@@ -22,11 +22,11 @@ import os
 import time
 from dataclasses import dataclass
 
-import claude
-import github_models
-import ollama as ollama_backend
-from budget import BudgetState
-from models import BudgetPool, ModelConfig, Response
+from autopilot import claude
+from autopilot import github_models
+from autopilot import ollama as ollama_backend
+from autopilot.budget import BudgetState
+from autopilot.models import BudgetPool, ModelConfig, Response
 
 
 # ── Settings bag (read from env at startup, passed around) ─────────────────────

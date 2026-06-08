@@ -4,10 +4,10 @@ dashboard.py
 Phase 4 — Streamlit cost dashboard.
 
 Run:
-    streamlit run dashboard.py
+    streamlit run src/autopilot/dashboard.py
 
 Auto-refreshes every 30 seconds. Pass --db to use a different SQLite file:
-    streamlit run dashboard.py -- --db data/autopilot.db
+    streamlit run src/autopilot/dashboard.py -- --db data/autopilot.db
 """
 from __future__ import annotations
 
@@ -16,10 +16,6 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-
-import sys
-from pathlib import Path as _Path
-sys.path.insert(0, str(_Path(__file__).parent / "src"))
 
 import streamlit as st
 
@@ -154,7 +150,7 @@ with st.sidebar:
     # Budget limits (editable)
     st.divider()
     st.subheader("Budget limits")
-    cfg_path = Path(__file__).parent / "src" / "autopilot" / "routing.yaml"
+    cfg_path = Path(__file__).parent / "routing.yaml"
     with open(cfg_path) as f:
         cfg = yaml.safe_load(f)
     claude_limit   = st.number_input("Claude limit ($)",    value=float(cfg["budgets"]["claude_monthly_usd"]),                   step=1.0)

@@ -22,12 +22,13 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from budget import BudgetState
-from interface import AutopilotSettings, send_request
-from models import Response
-from registry import ModelRegistry
+from autopilot.budget import BudgetState
+from autopilot.interface import AutopilotSettings, send_request
+from autopilot.models import Response
+from autopilot.registry import ModelRegistry
 
-DATASET_PATH = Path(__file__).parent / "data" / "routing_dataset.jsonl"
+# Training dataset lives in the project's data/ directory (two levels up from src/autopilot/)
+DATASET_PATH = Path(__file__).parent.parent.parent / "data" / "routing_dataset.jsonl"
 
 # ── Judge prompt ───────────────────────────────────────────────────────────────
 
@@ -141,7 +142,7 @@ async def _score_agreement(
         }
     ]
 
-    verifier_cfg = verifier_config.get(verifier_config.judge_backend_id)
+    verifier_cfg = verifier_config.get(verifier_config.judge_backend_id())
 
     try:
         resp, _ = await send_request(
