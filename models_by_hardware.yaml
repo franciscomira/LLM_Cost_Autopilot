@@ -1,0 +1,58 @@
+# config/models_by_hardware.yaml
+#
+# Maps available memory (GB) to recommended Ollama models.
+# The hardware profiler picks the highest tier whose `min_memory_gb` fits.
+#
+# Memory budget logic:
+#   - NVIDIA GPU  → use VRAM (model runs on GPU)
+#   - Apple Silicon → use total RAM × 0.75 (unified memory, leave headroom)
+#   - CPU only    → use total RAM × 0.50 (leave plenty for OS + KV cache)
+#
+# Rule of thumb: Q4_K_M quant needs ~0.7 GB per billion params.
+# These recommendations include a ~20% safety margin on top of that.
+#
+# To add newer/better models: just add entries here — no code changes needed.
+
+tiers:
+  - name: tiny          # < 4 GB available
+    min_memory_gb: 0
+    router:
+      model: "qwen2.5:1.5b"
+      description: "Qwen 2.5 1.5B — fits in 1.5 GB, fast classifier"
+    tier1_generator:
+      model: "qwen2.5:1.5b"
+      description: "Same model doubles as cheap generator at this size"
+
+  - name: small         # 4–7 GB available
+    min_memory_gb: 4
+    router:
+      model: "llama3.2:3b"
+      description: "Llama 3.2 3B — strong instruction following, ~2.5 GB"
+    tier1_generator:
+      model: "llama3.2:3b"
+      description: "Llama 3.2 3B — good quality for Tier-1 tasks"
+
+  - name: medium        # 7–12 GB available
+    min_memory_gb: 7
+    router:
+      model: "llama3.2:3b"
+      description: "Llama 3.2 3B router — no need to go bigger for classification"
+    tier1_generator:
+      model: "gemma3:4b"
+      description: "Gemma 3 4B — ~3.3 GB, strong instruction-following, leaves more headroom than 8B"
+      # alternative: "llama3.1:8b"  — ~5.5 GB, swap in via OLLAMA_TIER1_MODEL=llama3.1:8b
+
+  - name: large         # 12+ GB available
+    min_memory_gb: 12
+    router:
+      model: "llama3.2:3b"
+      description: "Llama 3.2 3B — router stays small regardless of hardware"
+    tier1_generator:
+      model: "gemma3:4b"
+      description: "Gemma 3 4B — fits easily, more headroom for concurrent requests"
+      # alternative: "llama3.1:8b"  — also fits, swap via OLLAMA_TIER1_MODEL=llama3.1:8b
+
+# Manual overrides: set these in .env or pass --router-model / --tier1-model
+# to scripts/setup.py to skip the auto-detection.
+# OLLAMA_ROUTER_MODEL=llama3.2:3b
+# OLLAMA_TIER1_MODEL=llama3.1:8b

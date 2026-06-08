@@ -1,0 +1,89 @@
+# config/routing.yaml
+#
+# Defines how complexity tiers map to backends, with budget-aware fallbacks.
+# Edit this file and PUT /v1/routing-config to apply without redeploying.
+
+# ── Budget pool limits ─────────────────────────────────────────────────────────
+budgets:
+  claude_monthly_usd: 20.0          # Claude Pro Agent SDK credit, no rollover
+  copilot_monthly_premium_requests: 300  # Estimate for your Pro+ plan; adjust to match
+                                    # your actual allowance from GitHub settings.
+
+# ── When to consider a pool "running low" ─────────────────────────────────────
+# The router checks these thresholds before spending from a pool.
+# If a pool is below its warning threshold, it deprioritises that backend.
+low_budget_thresholds:
+  claude_usd_remaining: 5.0         # Below $5 left → stop routing Tier-2 to Claude
+  copilot_requests_remaining: 30    # Below 30 requests → stop routine Copilot use
+
+# ── Complexity tiers ──────────────────────────────────────────────────────────
+# confidence_min: minimum router confidence score (1–5) to trust a tier assignment.
+# Below this, the request is escalated one tier up automatically.
+tiers:
+  1:
+    label: "simple"
+    description: "Reformatting, extraction, basic Q&A from provided context"
+    confidence_min: 3
+    primary_backend: "ollama_tier1"
+    fallback_backend: "copilot_mid"   # if local model fails or confidence too low
+
+  2:
+    label: "moderate"
+    description: "Summarisation, classification, structured analysis"
+    confidence_min: 3
+    primary_backend: "copilot_mid"
+    fallback_backend: "copilot_top"   # spill to Copilot top before touching Claude
+
+  3:
+    label: "complex"
+    description: "Multi-step reasoning, nuanced judgment, creative generation"
+    confidence_min: 0                 # always trust a Tier-3 classification
+    primary_backend: "copilot_top"    # Copilot is default even for hard tasks
+    # Claude kicks in only when complexity_score exceeds claude_reserve_threshold
+    # OR when Copilot premium requests are running low.
+    claude_reserve_threshold: 4.5     # router confidence ≥ 4.5 on "complex" → Claude
+    fallback_backend: "claude"
+
+# ── Backend definitions ────────────────────────────────────────────────────────
+backends:
+  ollama_router:
+    provider: "ollama"
+    role: "router"
+    budget_pool: "FREE"
+    # model is injected at runtime from hardware_profile output
+
+  ollama_tier1:
+    provider: "ollama"
+    role: "tier1_generator"
+    budget_pool: "FREE"
+    # model is injected at runtime from hardware_profile output
+
+  copilot_mid:
+    provider: "github_models"
+    model: "gpt-4o-mini"             # confirmed available on your plan
+    budget_pool: "COPILOT_PREMIUM"
+    premium_request_multiplier: 1
+
+  copilot_top:
+    provider: "github_models"
+    model: "gpt-4o"                  # confirmed available on your plan
+    budget_pool: "COPILOT_PREMIUM"
+    premium_request_multiplier: 3
+    # alternative: "Meta-Llama-3.1-405B-Instruct" — 405B params, potentially
+    # higher quality for complex reasoning; swap via routing-config API (Phase 5)
+    # when you want to benchmark it against gpt-4o on Tier-3 tasks.
+
+  claude:
+    provider: "anthropic"
+    model: "claude-haiku-4-5-20251001"   # cheapest Claude via SDK to conserve credit;
+                                          # swap to claude-sonnet-4-6 for harder tasks
+    budget_pool: "CLAUDE_CREDIT"
+    cost_per_input_token: 0.000001    # update from Anthropic pricing page
+    cost_per_output_token: 0.000005
+
+# ── Async quality verification ─────────────────────────────────────────────────
+verification:
+  sample_rate: 0.10                  # verify 10% of requests out-of-band
+  always_verify_confidence_below: 3  # always verify low-confidence routes
+  verifier_backend: "copilot_top"    # what to verify against (not Claude — save credit)
+  min_agreement_score: 0.75          # below this → log as mis-route + retrain candidate

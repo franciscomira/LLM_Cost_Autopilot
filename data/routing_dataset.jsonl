@@ -1,0 +1,200 @@
+{"prompt": "Convert this JSON array to a CSV table: [{\"id\":1,\"name\":\"Alice\"},{\"id\":2,\"name\":\"Bob\"}]", "tier": 1, "notes": "pure format conversion, no reasoning"}
+{"prompt": "What is the capital of Japan?", "tier": 1, "notes": "factual lookup, single answer"}
+{"prompt": "Extract all phone numbers from this text: 'Call us at 555-1234 or 555-5678 for support.'", "tier": 1, "notes": "regex-like extraction from given context"}
+{"prompt": "Reformat this date from MM/DD/YYYY to ISO 8601: 03/15/2024", "tier": 1, "notes": "deterministic transformation"}
+{"prompt": "Convert 72 degrees Fahrenheit to Celsius.", "tier": 1, "notes": "unit conversion, formula application"}
+{"prompt": "Translate 'Good morning, how are you?' to French.", "tier": 1, "notes": "single-sentence translation"}
+{"prompt": "Based on the provided invoice, what is the subtotal before tax?", "tier": 1, "notes": "extraction from given document"}
+{"prompt": "Fix the spelling errors in this sentence: 'Their going to the libary tommorow.'", "tier": 1, "notes": "mechanical correction"}
+{"prompt": "List all the names mentioned in the following paragraph: [paragraph provided]", "tier": 1, "notes": "named entity extraction from context"}
+{"prompt": "Convert this markdown table to plain text.", "tier": 1, "notes": "format conversion"}
+{"prompt": "What is 15% of 340?", "tier": 1, "notes": "arithmetic, single step"}
+{"prompt": "Rewrite this sentence in the passive voice: 'The engineer fixed the bug.'", "tier": 1, "notes": "grammatical transformation, one rule"}
+{"prompt": "Extract the sender, subject, and date from this email header: [header text provided]", "tier": 1, "notes": "structured field extraction from given data"}
+{"prompt": "Sort these five numbers in ascending order: 42, 7, 99, 3, 55.", "tier": 1, "notes": "algorithmic but trivial"}
+{"prompt": "What file extension is used for Python source files?", "tier": 1, "notes": "simple factual"}
+{"prompt": "Remove all punctuation from this sentence: 'Hello, world! How are you?'", "tier": 1, "notes": "text transformation"}
+{"prompt": "From the config below, what is the value of the 'timeout' key? [config text]", "tier": 1, "notes": "key-value lookup in provided data"}
+{"prompt": "Translate 'The meeting is cancelled.' to German.", "tier": 1, "notes": "short translation"}
+{"prompt": "Convert this Unix timestamp to a human-readable date: 1709251200", "tier": 1, "notes": "deterministic conversion"}
+{"prompt": "How many words are in the following sentence: 'The quick brown fox jumps over the lazy dog'?", "tier": 1, "notes": "counting task"}
+{"prompt": "Extract the URLs from this HTML snippet: [snippet provided]", "tier": 1, "notes": "pattern extraction from given context"}
+{"prompt": "What is the HTTP status code for 'Not Found'?", "tier": 1, "notes": "factual lookup"}
+{"prompt": "Uppercase this string: 'hello world'", "tier": 1, "notes": "trivial string transformation"}
+{"prompt": "From the meeting notes below, who is assigned the task of writing the report? [notes provided]", "tier": 1, "notes": "single fact extraction from context"}
+{"prompt": "Convert this temperature list from Celsius to Fahrenheit: [20, 30, 40]", "tier": 1, "notes": "repeated formula application"}
+{"prompt": "What is the syntax for a Python list comprehension that filters even numbers?", "tier": 1, "notes": "factual code syntax recall"}
+{"prompt": "Bold all occurrences of the word 'important' in this text using Markdown.", "tier": 1, "notes": "formatting transformation"}
+{"prompt": "From the provided CSV, list the values in the 'email' column.", "tier": 1, "notes": "column extraction from given data"}
+{"prompt": "What does the acronym 'REST' stand for?", "tier": 1, "notes": "factual lookup"}
+{"prompt": "Reformat this address to title case: '123 MAIN STREET, SPRINGFIELD'", "tier": 1, "notes": "case transformation"}
+{"prompt": "According to the provided changelog, what version introduced the dark mode feature?", "tier": 1, "notes": "lookup in provided document"}
+{"prompt": "Convert this YAML to JSON: [YAML content provided]", "tier": 1, "notes": "format conversion, structural equivalence"}
+{"prompt": "How many items are in the following JSON array? [array provided]", "tier": 1, "notes": "counting in given data"}
+{"prompt": "Strip HTML tags from this string: '<b>Hello</b> <i>world</i>'", "tier": 1, "notes": "text cleaning transformation"}
+{"prompt": "From the table below, what is the highest value in the 'sales' column? [table provided]", "tier": 1, "notes": "max lookup in given data"}
+{"prompt": "Translate 'Please submit your report by Friday.' to Spanish.", "tier": 1, "notes": "short translation"}
+{"prompt": "What is the result of 2 to the power of 10?", "tier": 1, "notes": "arithmetic"}
+{"prompt": "Pad this number to 6 digits with leading zeros: 42", "tier": 1, "notes": "deterministic formatting"}
+{"prompt": "Extract all hashtags from this tweet: 'Loving the #sunshine and #goodvibes today!'", "tier": 1, "notes": "pattern extraction from given text"}
+{"prompt": "What is the plural of 'criterion'?", "tier": 1, "notes": "vocabulary lookup"}
+{"prompt": "From the provided schedule, what time does the afternoon session start?", "tier": 1, "notes": "fact extraction from given document"}
+{"prompt": "Convert this list of names to alphabetical order: Bob, Alice, Charlie, Dave", "tier": 1, "notes": "sorting transformation"}
+{"prompt": "What keyboard shortcut pastes text on Windows?", "tier": 1, "notes": "factual lookup"}
+{"prompt": "Remove duplicate lines from this list: [list provided]", "tier": 1, "notes": "deduplication, mechanical"}
+{"prompt": "Mask the credit card number in this string, keeping only the last 4 digits: '4111 1111 1111 1234'", "tier": 1, "notes": "string masking, clear rule"}
+{"prompt": "From the JSON response below, extract the 'access_token' field value.", "tier": 1, "notes": "field extraction from provided JSON"}
+{"prompt": "Translate this error message to plain English: 'ECONNREFUSED 127.0.0.1:5432'", "tier": 1, "notes": "code lookup, simple explanation"}
+{"prompt": "How many lines are in the following code snippet? [snippet provided]", "tier": 1, "notes": "counting in provided data"}
+{"prompt": "Format this number with commas as thousands separators: 1234567", "tier": 1, "notes": "number formatting"}
+{"prompt": "What is the MIME type for a PNG image?", "tier": 1, "notes": "factual lookup"}
+{"prompt": "Summarise this 600-word product description in 3 bullet points.", "tier": 2, "notes": "summarisation, synthesis from given text"}
+{"prompt": "Classify the sentiment of the following customer review as positive, negative, or neutral.", "tier": 2, "notes": "single-label classification"}
+{"prompt": "Given this job posting and candidate resume, list the top 5 matching qualifications.", "tier": 2, "notes": "matching/alignment, structured output"}
+{"prompt": "Write a professional email declining a vendor proposal, keeping it brief and polite.", "tier": 2, "notes": "templated document, modest output"}
+{"prompt": "Compare the pros and cons of REST vs GraphQL for a mobile API.", "tier": 2, "notes": "two-option comparison, one cognitive step"}
+{"prompt": "Extract and group action items by assignee from this meeting transcript.", "tier": 2, "notes": "structured extraction with inference on ownership"}
+{"prompt": "Translate this 200-word product description from English to Japanese.", "tier": 2, "notes": "paragraph-length translation"}
+{"prompt": "Categorise each of these 10 customer support tickets into one of: billing, technical, account, other.", "tier": 2, "notes": "multi-instance classification"}
+{"prompt": "Summarise the key differences between the two contract versions below.", "tier": 2, "notes": "comparison and synthesis"}
+{"prompt": "Write a LinkedIn post announcing a product launch, professional tone, ~150 words.", "tier": 2, "notes": "short templated writing"}
+{"prompt": "From these five user stories, identify which ones have missing acceptance criteria.", "tier": 2, "notes": "gap analysis, structured review"}
+{"prompt": "Rewrite this technical explanation for a non-technical audience.", "tier": 2, "notes": "audience adaptation, requires understanding"}
+{"prompt": "Given this survey data, calculate the average NPS score and interpret the result.", "tier": 2, "notes": "calculation plus single-step interpretation"}
+{"prompt": "Classify each item in this grocery list as produce, dairy, meat, or pantry.", "tier": 2, "notes": "multi-instance classification"}
+{"prompt": "Summarise the main argument of this research abstract in one paragraph.", "tier": 2, "notes": "single-step summarisation"}
+{"prompt": "Write a short bio (100 words) for a speaker at a tech conference based on these bullet points.", "tier": 2, "notes": "short document generation from given facts"}
+{"prompt": "Identify the tone of this article excerpt: formal, casual, persuasive, or informational.", "tier": 2, "notes": "tone classification"}
+{"prompt": "From these customer complaints, identify the three most common themes.", "tier": 2, "notes": "thematic clustering, synthesis"}
+{"prompt": "Write a regex pattern that matches UK postcodes and explain each part.", "tier": 2, "notes": "pattern construction plus brief explanation"}
+{"prompt": "Translate this legal disclaimer (150 words) from English to French.", "tier": 2, "notes": "moderate-length translation"}
+{"prompt": "Given this API documentation excerpt, list the required parameters for the /auth endpoint.", "tier": 2, "notes": "structured extraction with light inference"}
+{"prompt": "Assess whether each of these five email subject lines is likely to be marked as spam.", "tier": 2, "notes": "multi-instance classification with heuristic application"}
+{"prompt": "Summarise the weekly sales figures from the report below into a one-sentence executive update.", "tier": 2, "notes": "condensation and synthesis"}
+{"prompt": "Write a polite follow-up email for a job application submitted two weeks ago.", "tier": 2, "notes": "templated writing"}
+{"prompt": "Identify which of these five code snippets violates the DRY principle and explain why.", "tier": 2, "notes": "pattern recognition with brief explanation"}
+{"prompt": "Convert this unstructured list of expenses into a structured table with date, category, and amount.", "tier": 2, "notes": "structuring with light inference on categories"}
+{"prompt": "Summarise the customer onboarding flow described in this document as a numbered checklist.", "tier": 2, "notes": "reformat with synthesis"}
+{"prompt": "Classify these 20 GitHub issues as bug, feature request, or documentation.", "tier": 2, "notes": "multi-instance classification"}
+{"prompt": "Write a brief out-of-office auto-reply message for a two-week vacation.", "tier": 2, "notes": "short templated document"}
+{"prompt": "From the changelog below, summarise all breaking changes introduced in version 3.x.", "tier": 2, "notes": "filtered summarisation from given document"}
+{"prompt": "Given the interview transcript, summarise the candidate's strengths and weaknesses.", "tier": 2, "notes": "analysis with synthesis from given content"}
+{"prompt": "Compare the latency and cost trade-offs between these three cloud database options.", "tier": 2, "notes": "structured comparison, one cognitive step"}
+{"prompt": "Write a one-paragraph product description for a smart water bottle targeting fitness enthusiasts.", "tier": 2, "notes": "short creative with clear brief"}
+{"prompt": "Identify spelling and grammar errors in this 300-word article and list them.", "tier": 2, "notes": "structured review, requires reading comprehension"}
+{"prompt": "From this list of 50 log entries, count how many are ERROR-level and list their timestamps.", "tier": 2, "notes": "filtering and aggregation"}
+{"prompt": "Explain the difference between authentication and authorisation in one paragraph.", "tier": 2, "notes": "explanation, well-scoped single concept"}
+{"prompt": "Translate this product FAQ (10 questions) from English to Portuguese.", "tier": 2, "notes": "moderate-length structured translation"}
+{"prompt": "Categorise each of these 15 marketing channels as paid, owned, or earned media.", "tier": 2, "notes": "multi-instance classification"}
+{"prompt": "Rewrite this 200-word email to be more concise without losing key information.", "tier": 2, "notes": "editing task, requires comprehension and judgment"}
+{"prompt": "Given the project status update below, identify the items that are behind schedule.", "tier": 2, "notes": "structured gap analysis from provided data"}
+{"prompt": "Write a 3-sentence value proposition for a B2B SaaS project management tool.", "tier": 2, "notes": "short focused copywriting"}
+{"prompt": "Summarise the key risks identified in this project post-mortem document.", "tier": 2, "notes": "extraction and synthesis from given document"}
+{"prompt": "From these job descriptions, identify which roles require Python experience.", "tier": 2, "notes": "multi-instance filtering with light NLP"}
+{"prompt": "Analyse the root cause of this production incident. Given the logs, traces, and deployment timeline below, explain what failed, why it cascaded, and propose both an immediate fix and a long-term architectural change to prevent recurrence.", "tier": 3, "notes": "multi-step causal reasoning, requires synthesising multiple data sources"}
+{"prompt": "Write a 1500-word short story about a marine biologist who discovers the ocean is slowly becoming sentient. Include foreshadowing, a non-linear timeline, and a twist ending.", "tier": 3, "notes": "long-form creative generation, structural complexity"}
+{"prompt": "Given these five competing product roadmap strategies, each with different risk profiles and resource requirements, evaluate them against our Q4 OKRs and recommend the best path with full justification.", "tier": 3, "notes": "multi-criteria decision analysis, nuanced judgment"}
+{"prompt": "Debug this Python async service — the race condition only appears under high concurrency (>200 RPS) and never reproduces in unit tests. Here are the relevant files and a flame graph.", "tier": 3, "notes": "complex debugging, concurrency reasoning, multiple artefacts"}
+{"prompt": "Design a multi-tenant SaaS database schema with row-level security, soft deletes, audit logging, and support for GDPR right-to-erasure without breaking foreign key integrity.", "tier": 3, "notes": "architectural design with many interacting constraints"}
+{"prompt": "Write a persuasive essay arguing both for and against a four-day work week, then synthesise a balanced policy recommendation for a mid-sized tech company.", "tier": 3, "notes": "two-sided argument plus synthesis, sustained reasoning"}
+{"prompt": "Refactor this 400-line Python monolith into a clean layered architecture (domain, application, infrastructure), preserving all existing behaviour and adding type annotations throughout.", "tier": 3, "notes": "large-scale code transformation with architectural judgment"}
+{"prompt": "Given this ambiguous regulatory change, analyse which of our current product features may need modification, estimate the legal risk of each interpretation, and propose a compliance roadmap.", "tier": 3, "notes": "legal reasoning under ambiguity, risk estimation, planning"}
+{"prompt": "Write a technical design document for an event-driven microservices migration from a monolith, covering service boundaries, data ownership, event schema versioning, and rollback strategy.", "tier": 3, "notes": "long-form technical writing with many interdependent decisions"}
+{"prompt": "Build a Python function that parses arbitrary LLM JSON outputs with graceful fallback to regex extraction, handles nested structures, validates against a Pydantic schema, and logs malformed payloads.", "tier": 3, "notes": "code generation with multiple requirements and edge cases"}
+{"prompt": "Analyse this A/B test dataset statistically. Determine whether the result is significant, identify potential confounders, and recommend whether to ship the variant given our business constraints.", "tier": 3, "notes": "statistical reasoning plus business judgment"}
+{"prompt": "Write a 2000-word chapter for a sci-fi novel that establishes a complex world with multiple political factions, in a narrator's unreliable voice, with subtext about climate displacement.", "tier": 3, "notes": "long-form literary creative writing, high craft demands"}
+{"prompt": "Given this microservice's OpenAPI spec and the five downstream consumers' requirements, identify all breaking changes a proposed refactor would introduce and suggest backward-compatible alternatives.", "tier": 3, "notes": "impact analysis across multiple systems, compatibility reasoning"}
+{"prompt": "Develop a pricing strategy for a new developer tools SaaS product entering a market with two dominant incumbents, considering freemium vs. usage-based vs. seat-based models and likely competitive responses.", "tier": 3, "notes": "strategic reasoning with market dynamics"}
+{"prompt": "Explain the Byzantine Generals problem, its connection to distributed consensus, and why it matters for blockchain — tailored for a senior engineer who has never studied distributed systems.", "tier": 3, "notes": "deep explanation requiring conceptual chain, audience tailoring"}
+{"prompt": "Given the following failed CI logs from three different environments, identify the root cause, explain why it only fails in CI but not locally, and write a minimal reproducible test case.", "tier": 3, "notes": "multi-environment debugging, requires constructing test artefact"}
+{"prompt": "Write a grant proposal introduction (~500 words) for an AI safety research project that must appeal simultaneously to technical reviewers and policy-focused funders.", "tier": 3, "notes": "dual-audience persuasive writing, domain expertise required"}
+{"prompt": "Architect a real-time collaborative editing system (like Google Docs) using CRDTs. Cover data structure selection, conflict resolution, offline support, and server-side persistence.", "tier": 3, "notes": "systems design with deep technical complexity"}
+{"prompt": "Given these 12 user research interview transcripts, synthesise a coherent set of user personas, identify latent needs not explicitly stated, and prioritise features based on frequency and intensity of pain.", "tier": 3, "notes": "qualitative synthesis with latent inference, multi-document"}
+{"prompt": "Evaluate the ethical implications of deploying a predictive policing algorithm in our city. Consider fairness metrics, feedback loops, accountability mechanisms, and community impact.", "tier": 3, "notes": "ethics reasoning, systemic thinking, nuanced judgment"}
+{"prompt": "Design an ML pipeline for real-time fraud detection at 50k TPS: feature engineering, model selection rationale, serving latency requirements, model drift monitoring, and retraining cadence.", "tier": 3, "notes": "ML systems design with performance and reliability constraints"}
+{"prompt": "Write a 10-year technology roadmap for a legacy bank modernising from COBOL mainframes to cloud-native architecture, phased to minimise operational risk while meeting regulatory timelines.", "tier": 3, "notes": "long-horizon planning with risk, regulatory, and technical constraints"}
+{"prompt": "Given this ambiguous product requirement ('users should be able to manage their data'), derive a complete set of user stories with acceptance criteria, identify edge cases, and flag unresolved design decisions.", "tier": 3, "notes": "requirements analysis from ambiguous brief, inference and completeness"}
+{"prompt": "Implement a rate limiter supporting both fixed-window and sliding-window algorithms, Redis-backed, with per-user and per-endpoint configuration, and a graceful degradation mode when Redis is unavailable.", "tier": 3, "notes": "code generation with algorithm choice, distributed state, and failure handling"}
+{"prompt": "Analyse this negotiation transcript between our company and a potential acquisition target. Identify leverage points on both sides, flag risks in the current offer terms, and suggest a counter-proposal.", "tier": 3, "notes": "negotiation strategy, multi-party interests, financial reasoning"}
+{"prompt": "Critique this architectural decision record (ADR) that chose event sourcing over traditional CRUD. Identify what trade-offs were not considered, what assumptions may not hold at scale, and suggest additions.", "tier": 3, "notes": "critical technical review requiring deep domain knowledge"}
+{"prompt": "Convert 5 kilometers to miles.", "tier": 1, "notes": "unit conversion"}
+{"prompt": "What is the default port for PostgreSQL?", "tier": 1, "notes": "factual lookup"}
+{"prompt": "Capitalise the first letter of each word in: 'the quick brown fox'", "tier": 1, "notes": "title-case transformation"}
+{"prompt": "Extract the domain name from this URL: 'https://www.example.com/path?q=1'", "tier": 1, "notes": "URL parsing, given data"}
+{"prompt": "From this receipt, what is the total amount paid? [receipt text provided]", "tier": 1, "notes": "extraction from given document"}
+{"prompt": "What does HTML stand for?", "tier": 1, "notes": "acronym lookup"}
+{"prompt": "Reverse this string: 'automation'", "tier": 1, "notes": "deterministic string transformation"}
+{"prompt": "List all countries mentioned in this paragraph: [paragraph provided]", "tier": 1, "notes": "entity extraction from given text"}
+{"prompt": "What is 1024 divided by 8?", "tier": 1, "notes": "arithmetic"}
+{"prompt": "Translate 'See you tomorrow.' to Italian.", "tier": 1, "notes": "short translation"}
+{"prompt": "From the configuration file below, what is the database host? [config provided]", "tier": 1, "notes": "key lookup in provided data"}
+{"prompt": "Remove all numbers from this string: 'abc123def456'", "tier": 1, "notes": "text filtering transformation"}
+{"prompt": "What year was Python first released?", "tier": 1, "notes": "historical fact lookup"}
+{"prompt": "Format this phone number as (XXX) XXX-XXXX: '5551234567'", "tier": 1, "notes": "format transformation"}
+{"prompt": "From the list below, identify which items are out of stock (quantity = 0). [list provided]", "tier": 1, "notes": "filter on given data"}
+{"prompt": "What is the square root of 144?", "tier": 1, "notes": "arithmetic"}
+{"prompt": "Convert this list to a numbered Markdown list: [Apple, Banana, Cherry]", "tier": 1, "notes": "format conversion"}
+{"prompt": "From the JSON below, extract the value of 'created_at'. [JSON provided]", "tier": 1, "notes": "field extraction from given data"}
+{"prompt": "Translate 'Please close the door.' to Mandarin Chinese (Simplified).", "tier": 1, "notes": "short translation"}
+{"prompt": "Write a one-line git commit message summarising: 'fixed the null pointer exception in the user login flow'", "tier": 1, "notes": "templated one-liner generation"}
+{"prompt": "Summarise this terms-of-service document highlighting any clauses that limit user rights.", "tier": 2, "notes": "synthesis plus filtered highlighting from long document"}
+{"prompt": "Given this 10-page market research report, identify the top 3 growth opportunities.", "tier": 2, "notes": "extraction and prioritisation from long document"}
+{"prompt": "Write a quarterly business review slide outline (8 slides) for a SaaS startup's metrics review.", "tier": 2, "notes": "structured document generation with domain knowledge"}
+{"prompt": "Classify each of these 30 support tickets by urgency: low, medium, high, critical.", "tier": 2, "notes": "multi-instance classification with ordinal scale"}
+{"prompt": "Rewrite this job description to be more inclusive, removing gendered language and unnecessary requirements.", "tier": 2, "notes": "editing with principle application"}
+{"prompt": "From these Jira tickets, identify dependencies and flag any that would block the Q2 release.", "tier": 2, "notes": "dependency analysis, structured output"}
+{"prompt": "Explain what a Dockerfile does to a developer who knows Python but has never used Docker.", "tier": 2, "notes": "tailored explanation, well-scoped concept"}
+{"prompt": "Summarise the Q2 financial results from this earnings call transcript into an executive summary.", "tier": 2, "notes": "targeted summarisation from given document"}
+{"prompt": "Write 5 A/B test variant headlines for a landing page targeting small business owners.", "tier": 2, "notes": "constrained creative writing, modest output"}
+{"prompt": "Given this onboarding survey data, identify the top friction points new users report.", "tier": 2, "notes": "thematic analysis from given data"}
+{"prompt": "Translate this 300-word user interface help text from English to German.", "tier": 2, "notes": "moderate-length translation"}
+{"prompt": "From these pull request descriptions, identify which ones lack a test plan.", "tier": 2, "notes": "structured review, filtering with comprehension"}
+{"prompt": "Reformat these 10 unstructured meeting notes into a structured summary with decisions and next steps.", "tier": 2, "notes": "structuring with synthesis"}
+{"prompt": "Given this risk register, rank the items by combined likelihood × impact score.", "tier": 2, "notes": "quantitative scoring plus ranking from given data"}
+{"prompt": "Write a gentle but firm message to a client who has missed three payment deadlines.", "tier": 2, "notes": "templated communication with tone judgment"}
+{"prompt": "Classify these 25 feature requests as technical debt, new feature, or bug fix.", "tier": 2, "notes": "multi-instance classification"}
+{"prompt": "Summarise the study findings and limitations of this academic abstract.", "tier": 2, "notes": "targeted summarisation from given text"}
+{"prompt": "Given the user feedback below, identify the most requested feature in the last 30 days.", "tier": 2, "notes": "trend identification from given data"}
+{"prompt": "Write three different subject line options for a re-engagement email campaign.", "tier": 2, "notes": "short constrained copywriting"}
+{"prompt": "From this code review, list only the comments that identify potential security issues.", "tier": 2, "notes": "filtering with domain classification"}
+{"prompt": "Given the two API designs below, evaluate which better follows REST conventions and why.", "tier": 2, "notes": "technical comparison with principle application"}
+{"prompt": "Summarise the customer journey in this UX research report as a 5-step flow.", "tier": 2, "notes": "abstraction and reformat from given document"}
+{"prompt": "Write a short performance review comment for an engineer who consistently delivers quality work but struggles with meeting deadlines.", "tier": 2, "notes": "structured feedback writing with nuance, modest output"}
+{"prompt": "Identify duplicate entries in this list of 100 customer records (by email). [records provided]", "tier": 2, "notes": "deduplication with matching logic"}
+{"prompt": "Translate this privacy policy section (250 words) from English to Korean.", "tier": 2, "notes": "moderate-length translation"}
+{"prompt": "From this incident retrospective, extract all items tagged as 'process improvement'.", "tier": 2, "notes": "filtered extraction from given document"}
+{"prompt": "Write a changelog entry for version 2.3.0 given these commit messages: [messages provided]", "tier": 2, "notes": "synthesis from given data into structured document"}
+{"prompt": "Classify these 20 database queries as read-heavy or write-heavy based on their SQL.", "tier": 2, "notes": "multi-instance technical classification"}
+{"prompt": "Explain event sourcing to a backend developer who knows CRUD but has never heard of CQRS.", "tier": 2, "notes": "tailored explanation, well-scoped concept"}
+{"prompt": "Given the competitive analysis doc, which of our features are currently market differentiators?", "tier": 2, "notes": "comparative analysis from given document"}
+{"prompt": "Design and implement a distributed task queue system in Python that supports priorities, retries with exponential backoff, dead-letter queues, and horizontal worker scaling without a message broker dependency.", "tier": 3, "notes": "complex code generation with distributed systems design"}
+{"prompt": "Write a chapter for an internal engineering blog explaining our decision to move from a monolith to microservices, including what went wrong, what we'd do differently, and lessons for teams considering the same.", "tier": 3, "notes": "reflective technical writing, requires architectural reasoning and narrative craft"}
+{"prompt": "Given our user retention data and cohort analysis, hypothesise why retention dropped 15% in the March cohort, design three experiments to test your hypotheses, and prioritise them by expected impact vs. effort.", "tier": 3, "notes": "analytical reasoning, experimental design, prioritisation with uncertainty"}
+{"prompt": "Audit this authentication system's code for security vulnerabilities, considering OWASP Top 10, explain each issue found, its severity, and provide a patched version.", "tier": 3, "notes": "security analysis requiring deep expertise plus code rewriting"}
+{"prompt": "Write a comprehensive onboarding plan for a new engineering manager joining a team with low morale and a backlog of technical debt, including their first 30, 60, and 90 day goals.", "tier": 3, "notes": "strategic planning with human/org dynamics, long-form structured output"}
+{"prompt": "Given this product's usage metrics, identify which features to deprecate, which to invest in, and how to communicate deprecations to customers without damaging retention.", "tier": 3, "notes": "product strategy with customer psychology considerations"}
+{"prompt": "Implement a parser for a custom DSL that supports arithmetic, boolean logic, variables, and function calls, with meaningful error messages and a clear AST structure.", "tier": 3, "notes": "language design plus implementation, high code complexity"}
+{"prompt": "Analyse the trade-offs between eventual consistency and strong consistency for our checkout service, and recommend which model to use given our SLA requirements and failure scenarios.", "tier": 3, "notes": "distributed systems reasoning with business context"}
+{"prompt": "Write a 1000-word op-ed from the perspective of an AI safety researcher arguing that current LLM deployment pace is reckless, with specific technical and societal arguments.", "tier": 3, "notes": "advocacy writing requiring domain knowledge and sustained argument"}
+{"prompt": "Given these architecture diagrams and performance benchmarks, identify the bottleneck in our data pipeline, explain the cascading effects, and design a solution that handles 10x the current load.", "tier": 3, "notes": "systems analysis with scale reasoning, multi-artefact input"}
+{"prompt": "Design a feedback and performance calibration process for a 50-person engineering organisation that minimises bias, scales across managers with different styles, and satisfies HR compliance requirements.", "tier": 3, "notes": "org design with fairness, scalability, and compliance constraints"}
+{"prompt": "What is the file extension for a TypeScript file?", "tier": 1, "notes": "factual lookup"}
+{"prompt": "From the provided order confirmation, what is the estimated delivery date?", "tier": 1, "notes": "extraction from given document"}
+{"prompt": "Translate 'Thank you for your patience.' to Dutch.", "tier": 1, "notes": "short translation"}
+{"prompt": "Convert 2.5 hours to minutes.", "tier": 1, "notes": "unit conversion"}
+{"prompt": "Remove leading and trailing whitespace from: '  hello world  '", "tier": 1, "notes": "string transformation"}
+{"prompt": "What does the CSS property 'display: flex' do?", "tier": 1, "notes": "factual definition lookup"}
+{"prompt": "From this list of transactions, which ones have a negative amount? [list provided]", "tier": 1, "notes": "filter on given data"}
+{"prompt": "Encode this string in Base64: 'autopilot'", "tier": 1, "notes": "deterministic encoding"}
+{"prompt": "What is the name of the HTTP method used to update a resource partially?", "tier": 1, "notes": "factual lookup"}
+{"prompt": "Given these API response times (ms): 120, 340, 95, 210, 88 — what is the average?", "tier": 1, "notes": "arithmetic mean from given data"}
+{"prompt": "Write a detailed go-to-market strategy for launching a developer tools product in a market dominated by two well-funded incumbents, covering positioning, channel strategy, pricing, and the first 90 days of execution.", "tier": 3, "notes": "multi-dimensional strategic planning, sustained analysis"}
+{"prompt": "Given this legacy codebase with no tests, design an incremental testing strategy that reduces risk while adding coverage without stopping feature delivery.", "tier": 3, "notes": "strategy under constraints, requires software engineering judgment"}
+{"prompt": "Analyse the privacy implications of our new user telemetry system, identify which data points trigger GDPR/CCPA obligations, recommend what to collect vs. drop, and draft a data retention policy.", "tier": 3, "notes": "legal reasoning, privacy engineering, policy writing"}
+{"prompt": "Write an engineering post-mortem template and then fill it out for a hypothetical incident where a config change caused 40 minutes of elevated error rates, including a blameless narrative and five action items.", "tier": 3, "notes": "template design plus instance generation, structured reasoning"}
+{"prompt": "Given our current microservices architecture and a 3× projected growth in traffic over 12 months, identify which services will become bottlenecks first, model the failure modes, and propose a capacity plan.", "tier": 3, "notes": "systems modelling, capacity planning, risk analysis"}
+{"prompt": "Write a comprehensive technical interview rubric for a senior backend engineer role, covering system design, coding, and behavioural dimensions, with scoring criteria and calibration guidance for interviewers.", "tier": 3, "notes": "rubric design requiring role expertise and assessment methodology"}
+{"prompt": "Analyse this venture capital term sheet and explain each clause in plain English, flag terms that are founder-unfriendly, and suggest negotiation positions for the three most impactful clauses.", "tier": 3, "notes": "legal and financial analysis, negotiation strategy, multi-clause reasoning"}
+{"prompt": "Given the provided user interview transcripts, build an empathy map covering what users say, think, feel, and do, then derive product principles that should guide the next design sprint.", "tier": 3, "notes": "qualitative synthesis across documents, principle derivation"}
+{"prompt": "Implement a generic retry decorator in Python with exponential backoff, jitter, per-exception handling, a maximum attempt count, and a synchronous/asynchronous mode that auto-detects from the wrapped function.", "tier": 3, "notes": "code generation with multiple constraints and async/sync duality"}
+{"prompt": "Given this startup's cap table and a proposed Series A term sheet, model the dilution for founders and early employees under best-case, expected, and down-round scenarios, and explain the implications.", "tier": 3, "notes": "financial modelling with scenario analysis, equity mechanics"}
