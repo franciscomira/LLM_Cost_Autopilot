@@ -41,8 +41,9 @@ tiers:
     primary_backend: "copilot_top"    # Copilot is default even for hard tasks
     # Claude kicks in only when complexity_score exceeds claude_reserve_threshold
     # OR when Copilot premium requests are running low.
-    claude_reserve_threshold: 4.5     # router confidence ≥ 4.5 on "complex" → Claude
-    fallback_backend: "claude"
+    claude_reserve_threshold: 4.5     # router confidence ≥ 4.5 → Claude (Haiku)
+    claude_sonnet_threshold: 4.8      # router confidence ≥ 4.8 → Claude Sonnet
+    fallback_backend: "claude_haiku"
 
 # ── Backend definitions ────────────────────────────────────────────────────────
 backends:
@@ -73,17 +74,24 @@ backends:
     # higher quality for complex reasoning; swap via routing-config API (Phase 5)
     # when you want to benchmark it against gpt-4o on Tier-3 tasks.
 
-  claude:
+  claude_haiku:
     provider: "anthropic"
-    model: "claude-haiku-4-5-20251001"   # cheapest Claude via SDK to conserve credit;
-                                          # swap to claude-sonnet-4-6 for harder tasks
+    model: "claude-haiku-4-5-20251001"
     budget_pool: "CLAUDE_CREDIT"
-    cost_per_input_token: 0.000001    # update from Anthropic pricing page
-    cost_per_output_token: 0.000005
+    cost_per_input_token: 0.000001    # $1 / 1M input tokens
+    cost_per_output_token: 0.000005   # $5 / 1M output tokens
+
+  claude_sonnet:
+    provider: "anthropic"
+    model: "claude-sonnet-4-6"
+    budget_pool: "CLAUDE_CREDIT"
+    cost_per_input_token: 0.000003    # $3 / 1M input tokens
+    cost_per_output_token: 0.000015   # $15 / 1M output tokens
 
 # ── Async quality verification ─────────────────────────────────────────────────
 verification:
   sample_rate: 0.10                  # verify 10% of requests out-of-band
   always_verify_confidence_below: 3  # always verify low-confidence routes
-  verifier_backend: "copilot_top"    # what to verify against (not Claude — save credit)
-  min_agreement_score: 0.75          # below this → log as mis-route + retrain candidate
+  verifier_backend: "copilot_top"    # reference backend (one tier above the original)
+  judge_backend: "copilot_mid"       # neutral judge — different model from the reference
+  min_agreement_score: 0.50          # below this → mis-route (0.50 = substantially wrong, not just less verbose)

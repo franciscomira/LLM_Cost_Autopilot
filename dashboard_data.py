@@ -76,7 +76,7 @@ def get_headline_metrics(db_path: str | Path, month: str | None = None) -> dict:
 
     total        = rows["total"] or 0
     free_count   = rows["free_count"] or 0
-    actual_cost  = (rows["actual_cost"] or 0.0) + (claude_row["claude_spent_usd"] if claude_row else 0.0)
+    actual_cost  = rows["actual_cost"] or 0.0   # cost_usd in request_log already includes Claude spend
     total_input  = rows["total_input"] or 0
     total_output = rows["total_output"] or 0
     escalated    = rows["escalated"] or 0
@@ -85,7 +85,7 @@ def get_headline_metrics(db_path: str | Path, month: str | None = None) -> dict:
         total_input  * BASELINE_COST_PER_INPUT_TOKEN +
         total_output * BASELINE_COST_PER_OUTPUT_TOKEN
     )
-    savings     = max(0.0, baseline - actual_cost)
+    savings     = baseline - actual_cost   # negative = overspent vs baseline
     savings_pct = (savings / baseline * 100) if baseline > 0 else 0.0
 
     return {
@@ -315,7 +315,7 @@ def get_recent_requests(db_path: str | Path, limit: int = 50) -> list[dict]:
                 complexity_tier, router_confidence, backend_id,
                 budget_pool, input_tokens, output_tokens,
                 latency_ms, cost_usd, premium_requests,
-                verifier_score, was_escalated
+                verifier_score, was_escalated, routing_reason
             FROM request_log
             ORDER BY timestamp DESC
             LIMIT ?

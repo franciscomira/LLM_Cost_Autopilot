@@ -23,7 +23,8 @@ _TIER_TO_QUALITY = {
     "ollama_tier1":  QualityTier.LOW,
     "copilot_mid":   QualityTier.MID,
     "copilot_top":   QualityTier.HIGH,
-    "claude":        QualityTier.HIGH,
+    "claude_haiku":  QualityTier.HIGH,
+    "claude_sonnet": QualityTier.HIGH,
 }
 
 _POOL_MAP = {
@@ -126,8 +127,16 @@ class ModelRegistry:
         return self.get(self._routing[tier]["fallback_backend"])
 
     def claude_reserve_threshold(self) -> float:
-        """Complexity confidence score above which Tier 3 uses Claude."""
+        """Confidence ≥ this → route Tier 3 to Claude (Haiku)."""
         return self._routing[3].get("claude_reserve_threshold", 4.5)
+
+    def judge_backend_id(self) -> str:
+        """Backend used as the LLM judge — should differ from the verifier backend."""
+        return self._verification.get("judge_backend", "copilot_mid")
+
+    def claude_sonnet_threshold(self) -> float:
+        """Confidence ≥ this → upgrade Tier 3 Claude call to Sonnet."""
+        return self._routing[3].get("claude_sonnet_threshold", 4.8)
 
     @property
     def budget_config(self) -> dict:

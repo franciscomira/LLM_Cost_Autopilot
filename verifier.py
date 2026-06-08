@@ -43,19 +43,19 @@ RESPONSE A (the response being evaluated):
 REFERENCE RESPONSE B (a higher-quality reference):
 {response_b}
 
-Score how well Response A answers the user request compared to Response B.
-Consider: factual accuracy, completeness, relevance, and absence of harmful errors.
-Ignore stylistic differences.
+Judge whether Response A correctly and adequately answers the user request.
+Use Response B only to check for factual errors or critical omissions in A.
+DO NOT penalise Response A for being shorter, less detailed, or stylistically different — brevity is fine if the answer is correct and complete enough for the request.
 
 Output ONLY valid JSON with a single key:
 {{"score": <integer 1-5>}}
 
 Where:
-  5 = Response A is equally good or better than B
-  4 = Response A is slightly worse but still useful
-  3 = Response A is noticeably worse — missing key points
-  2 = Response A is substantially wrong or incomplete
-  1 = Response A is harmful, hallucinated, or completely off
+  5 = Response A is correct and fully answers the request
+  4 = Response A is correct but missing a minor point
+  3 = Response A is partially correct — missing something important
+  2 = Response A contains factual errors or fails to answer the request
+  1 = Response A is harmful, hallucinated, or completely wrong
 """
 
 
@@ -141,9 +141,7 @@ async def _score_agreement(
         }
     ]
 
-    verifier_cfg = verifier_config.get(
-        verifier_config.verification_config.get("verifier_backend", "copilot_top")
-    )
+    verifier_cfg = verifier_config.get(verifier_config.judge_backend_id)
 
     try:
         resp, _ = await send_request(

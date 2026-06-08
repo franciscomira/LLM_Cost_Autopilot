@@ -36,6 +36,7 @@ from pydantic import BaseModel, Field
 
 from budget import BudgetState
 from dashboard_data import get_headline_metrics
+from hardware_profile import profile_hardware, recommend_models
 from interface import AutopilotSettings, send_request
 from registry import ModelRegistry
 from router import route
@@ -77,7 +78,9 @@ def _load_registry_and_budget() -> tuple[ModelRegistry, BudgetState]:
         claude_monthly_limit_usd=budgets.get("claude_monthly_usd", 20.0),
         copilot_monthly_requests_limit=budgets.get("copilot_monthly_premium_requests", 300),
     )
-    registry = ModelRegistry(_ROUTING_YAML)
+    hw = profile_hardware()
+    models = recommend_models(hw)
+    registry = ModelRegistry(_ROUTING_YAML, hardware_profile=hw, recommended_models=models)
     return registry, budget
 
 
@@ -199,12 +202,29 @@ async def completions(req: CompletionRequest):
             settings=_state.settings,
             complexity_tier=tier,
             router_confidence=confidence,
+            routing_reason=routing_reason,
         )
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        # Ollama timed out or failed — fall back to the tier's fallback backend
+        if selected_config.provider == "ollama":
+            try:
+                fallback_config = _state.registry.fallback_backend(tier)
+                response, log_id = await send_request(
+                    messages=messages,
+                    config=fallback_config,
+                    budget=_state.budget,
+                    settings=_state.settings,
+                    complexity_tier=tier,
+                    router_confidence=confidence,
+                    routing_reason="fallback",
+                )
+            except Exception as exc2:
+                raise HTTPException(status_code=502, detail=str(exc2)) from exc2
+        else:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     # Queue verification if needed (non-blocking — never delays the HTTP response)
-    ver_cfg = _state.registry.verification_config()
+    ver_cfg = _state.registry.verification_config
     if should_verify(response, ver_cfg):
         job = VerificationJob(
             request_log_id=log_id,

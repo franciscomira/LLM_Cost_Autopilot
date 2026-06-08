@@ -37,18 +37,11 @@ class ModelConfig:
     cost_per_output_token: float = 0.0     # USD (CLAUDE_CREDIT only)
     premium_request_multiplier: float = 1.0  # Copilot premium-request weight
 
-    # Performance baseline (populated after smoke test in Phase 1)
-    avg_latency_ms: float = 0.0
-
     def estimate_cost_usd(self, input_tokens: int, output_tokens: int) -> float:
         return (
             input_tokens * self.cost_per_input_token
             + output_tokens * self.cost_per_output_token
         )
-
-    def estimate_premium_requests(self) -> float:
-        """One call = multiplier premium requests from the Copilot pool."""
-        return self.premium_request_multiplier
 
 
 @dataclass
@@ -92,14 +85,3 @@ class BudgetSnapshot:
     def copilot_remaining_requests(self) -> float:
         return max(0.0, self.copilot_requests_limit - self.copilot_requests_used)
 
-    @property
-    def claude_pct_used(self) -> float:
-        if self.claude_limit_usd == 0:
-            return 0.0
-        return self.claude_spent_usd / self.claude_limit_usd * 100
-
-    @property
-    def copilot_pct_used(self) -> float:
-        if self.copilot_requests_limit == 0:
-            return 0.0
-        return self.copilot_requests_used / self.copilot_requests_limit * 100

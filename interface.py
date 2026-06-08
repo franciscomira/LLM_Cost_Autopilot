@@ -35,18 +35,12 @@ from models import BudgetPool, ModelConfig, Response
 class AutopilotSettings:
     ollama_base_url: str = "http://localhost:11434"
     github_token: str = ""
-    use_claude_subscription: bool = False
-    anthropic_api_key: str = ""
 
     @classmethod
     def from_env(cls) -> "AutopilotSettings":
         return cls(
             ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
             github_token=os.environ.get("GITHUB_TOKEN", ""),
-            use_claude_subscription=os.environ.get(
-                "USE_CLAUDE_SUBSCRIPTION", "false"
-            ).lower() == "true",
-            anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
         )
 
 
@@ -61,6 +55,7 @@ async def send_request(
     complexity_tier: int | None = None,
     router_confidence: float | None = None,
     was_escalated: bool = False,
+    routing_reason: str | None = None,
 ) -> tuple[Response, int | None]:
     """
     Send `messages` to the backend described by `config`, record spend in
@@ -102,7 +97,6 @@ async def send_request(
         response = await claude.send(
             messages=messages,
             config=config,
-            use_subscription=settings.use_claude_subscription,
         )
 
     else:
@@ -137,6 +131,7 @@ async def send_request(
             cost_usd=response.cost_usd,
             premium_requests=response.premium_requests_used,
             was_escalated=was_escalated,
+            routing_reason=routing_reason,
         )
 
     return response, log_id

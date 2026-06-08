@@ -163,7 +163,9 @@ def resolve_backend(
     # Tier 3: check if this should go to Claude instead of Copilot top
     if tier == 3:
         claude_cutoff = registry.claude_reserve_threshold()
-        claude_cfg = registry.get("claude")
+        sonnet_cutoff = registry.claude_sonnet_threshold()
+        haiku_cfg = registry.get("claude_haiku")
+        sonnet_cfg = registry.get("claude_sonnet")
         copilot_top_cfg = registry.primary_backend(3)
 
         copilot_low = (
@@ -176,13 +178,14 @@ def resolve_backend(
         )
 
         if confidence >= claude_cutoff and not claude_low:
+            claude_cfg = sonnet_cfg if confidence >= sonnet_cutoff else haiku_cfg
             return claude_cfg, "claude_reserve_threshold"
         if copilot_low and not claude_low:
-            return claude_cfg, "budget_spill_to_claude"
+            return haiku_cfg, "budget_spill_to_claude"
         if copilot_low and claude_low:
             if snapshot.copilot_remaining_requests > 0:
                 return copilot_top_cfg, "budget_exhausted"
-            return claude_cfg, "budget_exhausted"
+            return haiku_cfg, "budget_exhausted"
         return copilot_top_cfg, reason
 
     # Tier 1 or 2 — use primary unless its pool is exhausted
@@ -246,50 +249,3 @@ async def route(
     )
 
     return selected, tier, confidence, reason
-
-
-# ── Offline dataset evaluation (Phase 2 deliverable) ─────────────────────────
-
-def evaluate_dataset(dataset_path: Path | str) -> dict:
-    """
-    Synchronous utility for measuring router accuracy offline using the
-    labeled dataset. Calls classify_prompt via asyncio.run() per example.
-
-    Returns a dict with accuracy, confusion matrix, and per-tier metrics.
-    Only useful during development / CI — not called at runtime.
-    """
-    import asyncio
-    import json as _json
-
-    examples = []
-    with open(dataset_path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                examples.append(_json.loads(line))
-
-    # Confusion matrix: actual tier → predicted tier → count
-    confusion: dict[int, dict[int, int]] = {1: {1:0,2:0,3:0}, 2: {1:0,2:0,3:0}, 3: {1:0,2:0,3:0}}
-    correct = 0
-
-    # NOTE: evaluate_dataset runs the *parser only* against the gold labels
-    # using the prompt template as a reference, not a live Ollama call, so it
-    # can be run without Ollama available. For live accuracy measurement, call
-    # classify_prompt() directly in a test harness.
-    for ex in examples:
-        actual = ex["tier"]
-        # Without a live Ollama call we can't predict — mark as unresolved.
-        confusion[actual][actual] += 1  # placeholder: treat as correct
-        correct += 1
-
-    total = len(examples)
-    return {
-        "total": total,
-        "correct": correct,
-        "accuracy": correct / total if total else 0.0,
-        "confusion": confusion,
-        "note": (
-            "Placeholder — run with a live Ollama instance to get real predictions. "
-            "See tests/test_router_accuracy.py for the full eval harness."
-        ),
-    }

@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS request_log (
     cost_usd             REAL NOT NULL DEFAULT 0.0,
     premium_requests     REAL NOT NULL DEFAULT 0.0,
     verifier_score       REAL,
-    was_escalated        INTEGER NOT NULL DEFAULT 0   -- SQLite bool
+    was_escalated        INTEGER NOT NULL DEFAULT 0,  -- SQLite bool
+    routing_reason       TEXT
 );
 
 CREATE TABLE IF NOT EXISTS verification_log (
@@ -100,6 +101,11 @@ class BudgetState:
     def _init_db(self) -> None:
         with self._conn() as conn:
             conn.executescript(_SCHEMA)
+            # Migration: add routing_reason if this is an existing DB
+            try:
+                conn.execute("ALTER TABLE request_log ADD COLUMN routing_reason TEXT")
+            except Exception:
+                pass
 
     @staticmethod
     def _month_key() -> str:
@@ -171,6 +177,7 @@ class BudgetState:
         premium_requests: float,
         verifier_score: float | None = None,
         was_escalated: bool = False,
+        routing_reason: str | None = None,
     ) -> int:
         """Write one row to the request audit log. Returns the new row id."""
         with self._conn() as conn:
@@ -179,13 +186,13 @@ class BudgetState:
                     timestamp, prompt_hash, complexity_tier, router_confidence,
                     backend_id, budget_pool, input_tokens, output_tokens,
                     latency_ms, cost_usd, premium_requests,
-                    verifier_score, was_escalated
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    verifier_score, was_escalated, routing_reason
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     timestamp, prompt_hash, complexity_tier, router_confidence,
                     backend_id, budget_pool.value, input_tokens, output_tokens,
                     latency_ms, cost_usd, premium_requests,
-                    verifier_score, int(was_escalated),
+                    verifier_score, int(was_escalated), routing_reason,
                 ),
             )
             return cur.lastrowid

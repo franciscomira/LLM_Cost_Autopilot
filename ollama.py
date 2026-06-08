@@ -24,7 +24,7 @@ async def send(
     messages: list[dict[str, str]],
     config: ModelConfig,
     base_url: str = _DEFAULT_BASE_URL,
-    timeout: float = 120.0,
+    timeout: float = 30.0,
 ) -> Response:
     """
     Send a chat completion request to Ollama.
@@ -41,6 +41,7 @@ async def send(
         "model": config.model,
         "messages": messages,
         "stream": False,
+        "options": {"num_predict": 1024},  # cap output to prevent infinite generation
     }
 
     t0 = time.perf_counter()
