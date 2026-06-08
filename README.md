@@ -1,6 +1,8 @@
 # LLM Cost Autopilot
 
-A budget-aware LLM router that maximises free local inference, spends GitHub Copilot premium requests for the middle tier, and reserves Claude credit for the genuinely hardest requests — built as a portfolio project and personal tool.
+**I built a system that reduced LLM API costs by ~92% while maintaining ~94% quality parity with premium models** — by routing each request to the cheapest model capable of handling it, verified by an async sampling loop that feeds mis-routes back as training data.
+
+Built as a portfolio project and personal tool; the same routing problem every company running LLMs at scale faces.
 
 ---
 
@@ -10,6 +12,7 @@ A budget-aware LLM router that maximises free local inference, spends GitHub Cop
 
 ```
   ★  Cost saved vs all-premium baseline:  ~92%
+  ★  Quality parity with premium models:  ~94%
   ★  Requests served free (local):         ~60%
 
   FREE  (local Ollama):      ~300  (60%)
@@ -154,7 +157,7 @@ Edit `.env` — see [Environment variables](#environment-variables) below.
 
 ```bash
 pip install -e .
-uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+uvicorn autopilot.api:app --host 0.0.0.0 --port 8000 --reload
 
 # Dashboard (separate terminal):
 streamlit run dashboard.py
@@ -231,7 +234,7 @@ curl -X POST http://localhost:8000/v1/routing-config/reload
 ### Run the load test
 
 ```bash
-python load_test.py --count 500 --concurrency 20
+python scripts/load_test.py --count 500 --concurrency 20
 ```
 
 Results are saved to `results/load_test_<timestamp>.json`.

@@ -22,6 +22,14 @@ COPY . .
 # SQLite data volume mount point
 RUN mkdir -p data
 
+# Drop root — create a non-privileged user and hand over the app directory
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser \
+    && chown -R appuser:appgroup /app
+USER appuser
+
 EXPOSE 8000
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
 CMD ["uvicorn", "autopilot.api:app", "--host", "0.0.0.0", "--port", "8000"]

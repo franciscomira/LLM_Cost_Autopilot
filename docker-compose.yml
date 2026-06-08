@@ -81,7 +81,7 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - DB_PATH=/app/data/autopilot.db
     volumes:
-      - ./data:/app/data           # SQLite persistence
+      - autopilot_data:/app/data   # named volume — survives container replacement
       - ./src/autopilot/routing.yaml:/app/src/autopilot/routing.yaml  # live config — PUT /v1/routing-config updates this
     depends_on:
       ollama-init:
@@ -108,7 +108,7 @@ services:
     environment:
       - DB_PATH=/app/data/autopilot.db
     volumes:
-      - ./data:/app/data
+      - autopilot_data:/app/data
     depends_on:
       api:
         condition: service_healthy
@@ -116,3 +116,4 @@ services:
 
 volumes:
   ollama_models:
+  autopilot_data:
