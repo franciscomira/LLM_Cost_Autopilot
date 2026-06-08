@@ -69,6 +69,54 @@ async def send(
     )
 
 
+async def send_stream(
+    messages: list[dict[str, str]],
+    config: ModelConfig,
+    usage_out: dict,
+    base_url: str = _DEFAULT_BASE_URL,
+    timeout: float = 30.0,
+):
+    """
+    Async generator that yields text chunks from Ollama's streaming API.
+    Populates *usage_out* with input_tokens, output_tokens, latency_ms after exhaustion.
+    """
+    import json as _json
+
+    url = f"{base_url.rstrip('/')}/v1/chat/completions"
+    payload: dict[str, Any] = {
+        "model": config.model,
+        "messages": messages,
+        "stream": True,
+        "options": {"num_predict": 1024},
+    }
+
+    t0 = time.perf_counter()
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        async with client.stream("POST", url, json=payload) as r:
+            r.raise_for_status()
+            async for line in r.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                raw = line[6:]
+                if raw.strip() == "[DONE]":
+                    break
+                try:
+                    chunk = _json.loads(raw)
+                except Exception:
+                    continue
+                delta = chunk["choices"][0]["delta"].get("content", "")
+                if delta:
+                    yield delta
+                # Ollama includes usage in the final chunk
+                if chunk.get("usage"):
+                    usage_out["input_tokens"] = chunk["usage"].get("prompt_tokens", 0)
+                    usage_out["output_tokens"] = chunk["usage"].get("completion_tokens", 0)
+
+    usage_out.setdefault("input_tokens", 0)
+    usage_out.setdefault("output_tokens", 0)
+    usage_out["latency_ms"] = (time.perf_counter() - t0) * 1000
+
+
 async def list_local_models(base_url: str = _DEFAULT_BASE_URL) -> list[str]:
     """Return the names of all models currently pulled in Ollama."""
     async with httpx.AsyncClient(timeout=10.0) as client:

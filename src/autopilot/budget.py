@@ -30,7 +30,7 @@ from autopilot.models import BudgetPool, BudgetSnapshot
 logger = logging.getLogger(__name__)
 
 
-# ── Schema ─────────────────────────────────────────────────────────────────────
+# ── Schema & migrations ────────────────────────────────────────────────────────
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS budget (
@@ -70,7 +70,19 @@ CREATE TABLE IF NOT EXISTS verification_log (
     original_tier           INTEGER,
     corrected_tier          INTEGER              -- set when is_mis_route=1
 );
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT UNIQUE NOT NULL,
+    applied_at TEXT NOT NULL
+);
 """
+
+# Additive migrations for databases created before the full schema above.
+# Each entry is (name, sql). Applied once; recorded in schema_migrations.
+_MIGRATIONS: list[tuple[str, str]] = [
+    ("001_add_routing_reason", "ALTER TABLE request_log ADD COLUMN routing_reason TEXT"),
+]
 
 
 # ── BudgetState ────────────────────────────────────────────────────────────────
@@ -106,6 +118,7 @@ class BudgetState:
         raw_threshold = alert_threshold_usd or float(os.environ.get("BUDGET_ALERT_THRESHOLD_USD", "0"))
         self._alert_threshold_usd = raw_threshold if raw_threshold > 0 else None
         self._last_alert_fired_at_usd: float | None = None
+        self._month_end_notified: str | None = None  # month_key of last pre-notification
         self._init_db()
 
     # ── Internal helpers ───────────────────────────────────────────────────────
@@ -115,12 +128,21 @@ class BudgetState:
         conn = sqlite3.connect(self.db_path, check_same_thread=False)
         try:
             conn.executescript(_SCHEMA)
-            # Migration: add routing_reason if this is an existing DB
-            try:
-                conn.execute("ALTER TABLE request_log ADD COLUMN routing_reason TEXT")
-                conn.commit()
-            except Exception:
-                pass
+            for name, sql in _MIGRATIONS:
+                already = conn.execute(
+                    "SELECT 1 FROM schema_migrations WHERE name = ?", (name,)
+                ).fetchone()
+                if already:
+                    continue
+                try:
+                    conn.execute(sql)
+                except sqlite3.OperationalError:
+                    pass  # column already present in a fresh DB
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?, ?)",
+                    (name, datetime.now().isoformat()),
+                )
+            conn.commit()
         finally:
             conn.close()
 
@@ -182,6 +204,47 @@ class BudgetState:
             )
         except Exception as exc:
             logger.error("budget alert webhook failed", extra={"error": str(exc)})
+
+    async def check_month_end_notification(self) -> None:
+        """
+        Fire a pre-notification webhook if we are within 3 days of month-end
+        and some Claude budget has been used this month.
+        Fires at most once per month.
+        """
+        if not self._alert_webhook_url:
+            return
+
+        now = datetime.now()
+        import calendar
+        days_in_month = calendar.monthrange(now.year, now.month)[1]
+        days_remaining = days_in_month - now.day
+        if days_remaining > 3:
+            return
+
+        month = self._month_key()
+        if self._month_end_notified == month:
+            return
+
+        snap = await self.snapshot()
+        if snap.claude_spent_usd <= 0 and snap.copilot_requests_used <= 0:
+            return
+
+        payload = {
+            "event": "month_end_approaching",
+            "days_remaining": days_remaining,
+            "claude_spent_usd": round(snap.claude_spent_usd, 4),
+            "claude_limit_usd": snap.claude_limit_usd,
+            "copilot_requests_used": snap.copilot_requests_used,
+            "copilot_requests_limit": snap.copilot_requests_limit,
+            "month": month,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(self._alert_webhook_url, json=payload)
+            self._month_end_notified = month
+            logger.info("month-end pre-notification sent", extra={"days_remaining": days_remaining, "month": month})
+        except Exception as exc:
+            logger.error("month-end notification webhook failed", extra={"error": str(exc)})
 
     async def record_spend(
         self,

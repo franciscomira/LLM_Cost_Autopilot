@@ -24,25 +24,31 @@ Env vars (all optional, have defaults):
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncGenerator
 
 import yaml
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from autopilot.logging_config import REQUEST_ID, configure_logging
 
+from autopilot import claude as claude_backend
+from autopilot import github_models
+from autopilot import ollama as ollama_backend
 from autopilot.budget import BudgetState
 from autopilot.dashboard_data import get_headline_metrics
 from autopilot.hardware_profile import profile_hardware, recommend_models
-from autopilot.interface import AutopilotSettings, send_request
+from autopilot.interface import AutopilotSettings, _hash_prompt, send_request
+from autopilot.models import BudgetPool
 from autopilot.registry import ModelRegistry
 from autopilot.router import route
 from autopilot.verification_queue import VerificationQueue
@@ -98,6 +104,16 @@ def _load_registry_and_budget() -> tuple[ModelRegistry, BudgetState]:
     return registry, budget
 
 
+async def _monthly_notifier_loop() -> None:
+    """Check once per day whether a month-end pre-notification should fire."""
+    while True:
+        await asyncio.sleep(86_400)
+        try:
+            await _state.budget.check_month_end_notification()
+        except Exception as exc:
+            logger.error("monthly notifier error", extra={"error": str(exc)})
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _state.settings = AutopilotSettings.from_env()
@@ -111,8 +127,11 @@ async def lifespan(app: FastAPI):
     )
     await _state.vq.start()
 
+    notifier_task = asyncio.create_task(_monthly_notifier_loop())
+
     yield
 
+    notifier_task.cancel()
     await _state.vq.stop()
 
 
@@ -157,7 +176,7 @@ class Message(BaseModel):
 
 class CompletionRequest(BaseModel):
     messages: list[Message] = Field(..., min_length=1, max_length=_MAX_MESSAGES)
-    stream: bool = False  # reserved; streaming not yet implemented
+    stream: bool = False
 
 
 class RoutingMeta(BaseModel):
@@ -219,6 +238,99 @@ class RoutingConfigUpdate(BaseModel):
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
+async def _stream_completions(
+    messages: list[dict],
+    selected_config,
+    tier: int | None,
+    confidence: float | None,
+    routing_reason: str,
+) -> AsyncGenerator[str, None]:
+    """SSE generator for streaming completions."""
+    routing_event = {
+        "event": "routing",
+        "backend_id": selected_config.backend_id,
+        "provider": selected_config.provider,
+        "model": selected_config.model,
+        "routing_reason": routing_reason,
+    }
+    yield f"data: {json.dumps(routing_event)}\n\n"
+
+    usage_out: dict = {}
+    t0 = time.perf_counter()
+
+    try:
+        if selected_config.provider == "ollama":
+            gen = ollama_backend.send_stream(
+                messages, selected_config, usage_out, _state.settings.ollama_base_url
+            )
+        elif selected_config.provider == "github_models":
+            gen = github_models.send_stream(
+                messages, selected_config, _state.settings.github_token, usage_out
+            )
+        elif selected_config.provider == "anthropic":
+            gen = claude_backend.send_stream(messages, selected_config, usage_out)
+        else:
+            yield f"data: {json.dumps({'event': 'error', 'detail': f'Unknown provider: {selected_config.provider}'})}\n\n"
+            return
+
+        async for chunk in gen:
+            yield f"data: {json.dumps({'event': 'chunk', 'text': chunk})}\n\n"
+
+    except Exception as exc:
+        logger.error("streaming error", extra={"error": str(exc), "backend_id": selected_config.backend_id})
+        yield f"data: {json.dumps({'event': 'error', 'detail': str(exc)})}\n\n"
+        return
+
+    input_tokens = usage_out.get("input_tokens", 0)
+    output_tokens = usage_out.get("output_tokens", 0)
+    latency_ms = usage_out.get("latency_ms", (time.perf_counter() - t0) * 1000)
+    cost_usd = selected_config.estimate_cost_usd(input_tokens, output_tokens)
+    premium_requests = (
+        selected_config.premium_request_multiplier
+        if selected_config.budget_pool == BudgetPool.COPILOT_PREMIUM
+        else 0.0
+    )
+
+    await _state.budget.record_spend(
+        pool=selected_config.budget_pool, cost_usd=cost_usd, premium_requests=premium_requests
+    )
+    prompt_text = " ".join(m["content"] for m in messages if m["role"] == "user")
+    await _state.budget.log_request(
+        timestamp=t0,
+        prompt_hash=_hash_prompt(prompt_text),
+        complexity_tier=tier,
+        router_confidence=confidence,
+        backend_id=selected_config.backend_id,
+        budget_pool=selected_config.budget_pool,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        latency_ms=round(latency_ms, 1),
+        cost_usd=cost_usd,
+        premium_requests=premium_requests,
+        routing_reason=routing_reason,
+    )
+
+    done_event = {
+        "event": "done",
+        "routing": {
+            "backend_id": selected_config.backend_id,
+            "provider": selected_config.provider,
+            "model": selected_config.model,
+            "budget_pool": selected_config.budget_pool.value,
+            "complexity_tier": tier,
+            "router_confidence": confidence,
+            "routing_reason": routing_reason,
+            "latency_ms": round(latency_ms, 1),
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cost_usd": cost_usd,
+            "premium_requests_used": premium_requests,
+        },
+    }
+    yield f"data: {json.dumps(done_event)}\n\n"
+    yield "data: [DONE]\n\n"
+
+
 @app.post("/v1/completions", response_model=CompletionResponse)
 async def completions(req: CompletionRequest):
     """Route a chat request through the autopilot and return the response."""
@@ -231,6 +343,13 @@ async def completions(req: CompletionRequest):
         registry=_state.registry,
         settings=_state.settings,
     )
+
+    if req.stream:
+        return StreamingResponse(
+            _stream_completions(messages, selected_config, tier, confidence, routing_reason),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     try:
         response, log_id = await send_request(

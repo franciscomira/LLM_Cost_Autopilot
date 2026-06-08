@@ -129,6 +129,11 @@ Beyond the core routing logic, the service has been hardened across three sprint
 - **`HEALTHCHECK` in image** — Docker can probe `GET /health` directly on the image (not just via compose), so `docker ps` reports accurate health state and compose `depends_on: condition: service_healthy` gates work correctly.
 - **Named volume for SQLite** — `autopilot_data` is a Docker-managed named volume; data survives `docker-compose down` and container replacement without depending on a host-side `./data` folder.
 
+### Operational polish (Sprint 6)
+- **SSE streaming** — `POST /v1/completions` accepts `"stream": true` and returns `text/event-stream`. Clients receive three event types: `routing` (backend decision, sent before generation begins), `chunk` (one text fragment per frame), and `done` (full metadata — tokens, cost, latency — after generation completes). Spend and audit logging happen at stream end, not after buffering the full response. Each backend adapter (`ollama.py`, `github_models.py`, `claude.py`) has a dedicated `send_stream()` async generator.
+- **Versioned migration table** — `schema_migrations` table replaces the silent `try/except ALTER TABLE` hack. Migrations are declared as a named list; each runs once and is recorded. The only caught exception is `sqlite3.OperationalError` (column already exists on a fresh DB), so real errors are no longer swallowed.
+- **Month-end pre-notification** — a daily background task calls `BudgetState.check_month_end_notification()`, which POSTs a `month_end_approaching` webhook payload to `BUDGET_ALERT_WEBHOOK_URL` when ≤3 days remain in the billing month and any budget was consumed. Fires at most once per month, reusing the existing alert webhook.
+
 ---
 
 ## Setup
@@ -222,6 +227,29 @@ Example response `routing` block:
 ```
 
 The response header also includes `X-Request-Id` for log correlation.
+
+### Stream a response (SSE)
+
+```bash
+curl -s -X POST http://localhost:8000/v1/completions \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-key" \
+  -d '{"messages": [{"role": "user", "content": "Explain backpressure in distributed systems."}], "stream": true}'
+```
+
+The response is a `text/event-stream` with three event types:
+
+```
+data: {"event": "routing", "backend_id": "copilot_mid", "provider": "github_models", "model": "gpt-4o-mini", "routing_reason": "primary"}
+
+data: {"event": "chunk", "text": "Backpressure is a "}
+
+data: {"event": "chunk", "text": "flow-control mechanism..."}
+
+data: {"event": "done", "routing": {"input_tokens": 22, "output_tokens": 187, "cost_usd": 0.0, "latency_ms": 1243.1, ...}}
+
+data: [DONE]
+```
 
 ### Check budget and savings
 

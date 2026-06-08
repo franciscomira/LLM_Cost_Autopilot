@@ -87,6 +87,57 @@ async def send(
     )
 
 
+async def send_stream(
+    messages: list[dict[str, str]],
+    config: ModelConfig,
+    github_token: str,
+    usage_out: dict,
+    timeout: float = 60.0,
+):
+    """
+    Async generator that yields text chunks from GitHub Models' streaming API.
+    Populates *usage_out* with input_tokens, output_tokens, latency_ms after exhaustion.
+    """
+    import json as _json
+
+    headers = {
+        "Authorization": f"Bearer {github_token}",
+        "Content-Type": "application/json",
+    }
+    payload: dict[str, Any] = {
+        "model": config.model,
+        "messages": messages,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+
+    t0 = time.perf_counter()
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        async with client.stream("POST", _GITHUB_MODELS_URL, headers=headers, json=payload) as r:
+            r.raise_for_status()
+            async for line in r.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                raw = line[6:]
+                if raw.strip() == "[DONE]":
+                    break
+                try:
+                    chunk = _json.loads(raw)
+                except Exception:
+                    continue
+                delta = chunk["choices"][0]["delta"].get("content", "") if chunk.get("choices") else ""
+                if delta:
+                    yield delta
+                # Usage arrives in a final chunk with empty choices
+                if chunk.get("usage"):
+                    usage_out["input_tokens"] = chunk["usage"].get("prompt_tokens", 0)
+                    usage_out["output_tokens"] = chunk["usage"].get("completion_tokens", 0)
+
+    usage_out.setdefault("input_tokens", 0)
+    usage_out.setdefault("output_tokens", 0)
+    usage_out["latency_ms"] = (time.perf_counter() - t0) * 1000
+
+
 async def list_available_models(github_token: str) -> list[dict]:
     """
     List models available through the GitHub Models API.
