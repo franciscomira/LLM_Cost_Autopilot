@@ -54,40 +54,40 @@ def test_recommend_models_returns_valid_names(tmp_path):
 
 # ── BudgetState ────────────────────────────────────────────────────────────────
 
-def test_budget_state_fresh_snapshot(tmp_path):
+async def test_budget_state_fresh_snapshot(tmp_path):
     budget = BudgetState(tmp_path / "test.db", claude_monthly_limit_usd=20.0)
-    snap = budget.snapshot()
+    snap = await budget.snapshot()
     assert snap.claude_spent_usd == 0.0
     assert snap.copilot_requests_used == 0.0
     assert snap.claude_remaining_usd == 20.0
 
 
-def test_budget_state_record_claude_spend(tmp_path):
+async def test_budget_state_record_claude_spend(tmp_path):
     budget = BudgetState(tmp_path / "test.db", claude_monthly_limit_usd=20.0)
-    budget.record_spend(pool=BudgetPool.CLAUDE_CREDIT, cost_usd=1.50)
-    budget.record_spend(pool=BudgetPool.CLAUDE_CREDIT, cost_usd=0.25)
-    snap = budget.snapshot()
+    await budget.record_spend(pool=BudgetPool.CLAUDE_CREDIT, cost_usd=1.50)
+    await budget.record_spend(pool=BudgetPool.CLAUDE_CREDIT, cost_usd=0.25)
+    snap = await budget.snapshot()
     assert abs(snap.claude_spent_usd - 1.75) < 0.001
     assert abs(snap.claude_remaining_usd - 18.25) < 0.001
 
 
-def test_budget_state_record_copilot_spend(tmp_path):
+async def test_budget_state_record_copilot_spend(tmp_path):
     budget = BudgetState(tmp_path / "test.db", copilot_monthly_requests_limit=300)
-    budget.record_spend(pool=BudgetPool.COPILOT_PREMIUM, premium_requests=3.0)
-    snap = budget.snapshot()
+    await budget.record_spend(pool=BudgetPool.COPILOT_PREMIUM, premium_requests=3.0)
+    snap = await budget.snapshot()
     assert snap.copilot_requests_used == 3.0
     assert snap.copilot_remaining_requests == 297.0
 
 
-def test_budget_state_free_pool_no_spend(tmp_path):
+async def test_budget_state_free_pool_no_spend(tmp_path):
     budget = BudgetState(tmp_path / "test.db")
-    budget.record_spend(pool=BudgetPool.FREE)   # should be a no-op
-    snap = budget.snapshot()
+    await budget.record_spend(pool=BudgetPool.FREE)   # should be a no-op
+    snap = await budget.snapshot()
     assert snap.claude_spent_usd == 0.0
     assert snap.copilot_requests_used == 0.0
 
 
-def test_budget_pool_healthy_checks(tmp_path):
+async def test_budget_pool_healthy_checks(tmp_path):
     budget = BudgetState(
         tmp_path / "test.db",
         claude_monthly_limit_usd=20.0,
@@ -95,23 +95,23 @@ def test_budget_pool_healthy_checks(tmp_path):
     )
     thresholds = {"claude_usd_remaining": 5.0, "copilot_requests_remaining": 30}
 
-    assert budget.is_pool_healthy(BudgetPool.FREE, thresholds) is True
-    assert budget.is_pool_healthy(BudgetPool.CLAUDE_CREDIT, thresholds) is True
-    assert budget.is_pool_healthy(BudgetPool.COPILOT_PREMIUM, thresholds) is True
+    assert await budget.is_pool_healthy(BudgetPool.FREE, thresholds) is True
+    assert await budget.is_pool_healthy(BudgetPool.CLAUDE_CREDIT, thresholds) is True
+    assert await budget.is_pool_healthy(BudgetPool.COPILOT_PREMIUM, thresholds) is True
 
     # Burn near the limit
-    budget.record_spend(BudgetPool.CLAUDE_CREDIT, cost_usd=16.0)  # $4 left < $5 floor
-    assert budget.is_pool_healthy(BudgetPool.CLAUDE_CREDIT, thresholds) is False
+    await budget.record_spend(BudgetPool.CLAUDE_CREDIT, cost_usd=16.0)  # $4 left < $5 floor
+    assert await budget.is_pool_healthy(BudgetPool.CLAUDE_CREDIT, thresholds) is False
 
     budget2 = BudgetState(tmp_path / "test2.db", copilot_monthly_requests_limit=300)
-    budget2.record_spend(BudgetPool.COPILOT_PREMIUM, premium_requests=275)  # 25 left < 30
-    assert budget2.is_pool_healthy(BudgetPool.COPILOT_PREMIUM, thresholds) is False
+    await budget2.record_spend(BudgetPool.COPILOT_PREMIUM, premium_requests=275)  # 25 left < 30
+    assert await budget2.is_pool_healthy(BudgetPool.COPILOT_PREMIUM, thresholds) is False
 
 
-def test_budget_log_request_writes_row(tmp_path):
+async def test_budget_log_request_writes_row(tmp_path):
     import time, sqlite3
     budget = BudgetState(tmp_path / "test.db")
-    budget.log_request(
+    await budget.log_request(
         timestamp=time.time(),
         prompt_hash="abc123",
         complexity_tier=2,
@@ -186,7 +186,7 @@ async def test_send_request_ollama_mock(tmp_path):
 
     assert resp.text == "OK"
     assert resp.budget_pool == BudgetPool.FREE
-    snap = budget.snapshot()
+    snap = await budget.snapshot()
     assert snap.claude_spent_usd == 0.0   # FREE pool — no charges
 
 
@@ -226,6 +226,6 @@ async def test_send_request_records_copilot_spend(tmp_path):
             log=False,
         )
 
-    snap = budget.snapshot()
+    snap = await budget.snapshot()
     assert snap.copilot_requests_used == 1.0
     assert snap.claude_spent_usd == 0.0

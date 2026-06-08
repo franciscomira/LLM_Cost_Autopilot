@@ -12,6 +12,7 @@ Auto-refreshes every 30 seconds. Pass --db to use a different SQLite file:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -86,8 +87,8 @@ def _seed_demo_data(db_path: Path) -> None:
 
         from models import BudgetPool as BP
         pool_enum = BP(pool)
-        budget.record_spend(pool=pool_enum, cost_usd=cost, premium_requests=prem if prem else 0.0)
-        budget.log_request(
+        asyncio.run(budget.record_spend(pool=pool_enum, cost_usd=cost, premium_requests=prem if prem else 0.0))
+        asyncio.run(budget.log_request(
             timestamp=ts,
             prompt_hash=f"demo{i:04d}",
             complexity_tier=tier,
@@ -100,7 +101,7 @@ def _seed_demo_data(db_path: Path) -> None:
             cost_usd=cost,
             premium_requests=prem if prem else 0.0,
             was_escalated=escalated,
-        )
+        ))
 
 
 # Seed on first load if DB has no data

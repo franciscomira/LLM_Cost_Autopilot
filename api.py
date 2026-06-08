@@ -243,23 +243,24 @@ async def completions(req: CompletionRequest):
             routing_reason=routing_reason,
         )
     except Exception as exc:
-        # Ollama timed out or failed — fall back to the tier's fallback backend
-        if selected_config.provider == "ollama":
-            try:
-                fallback_config = _state.registry.fallback_backend(tier)
-                response, log_id = await send_request(
-                    messages=messages,
-                    config=fallback_config,
-                    budget=_state.budget,
-                    settings=_state.settings,
-                    complexity_tier=tier,
-                    router_confidence=confidence,
-                    routing_reason="fallback",
-                )
-            except Exception as exc2:
-                raise HTTPException(status_code=502, detail=str(exc2)) from exc2
-        else:
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        # Primary backend failed — try the tier's fallback regardless of provider
+        try:
+            fallback_config = _state.registry.fallback_backend(tier)
+            if fallback_config.backend_id == selected_config.backend_id:
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
+            response, log_id = await send_request(
+                messages=messages,
+                config=fallback_config,
+                budget=_state.budget,
+                settings=_state.settings,
+                complexity_tier=tier,
+                router_confidence=confidence,
+                routing_reason="fallback",
+            )
+        except HTTPException:
+            raise
+        except Exception as exc2:
+            raise HTTPException(status_code=502, detail=str(exc2)) from exc2
 
     # Queue verification if needed (non-blocking — never delays the HTTP response)
     ver_cfg = _state.registry.verification_config
@@ -323,7 +324,7 @@ async def list_models():
 @app.get("/v1/stats", response_model=StatsResponse)
 async def stats():
     """Return current-month budget burn-down and headline savings metrics."""
-    snap = _state.budget.snapshot()
+    snap = await _state.budget.snapshot()
     headline = get_headline_metrics(_DB_PATH)
 
     return StatsResponse(

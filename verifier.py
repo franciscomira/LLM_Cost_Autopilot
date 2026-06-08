@@ -251,7 +251,7 @@ async def run_verification_job(
         added_to_training = True
 
     # Persist to verification_log
-    budget.log_verification(
+    await budget.log_verification(
         request_log_id=job.request_log_id,
         verified_at=time.time(),
         original_backend_id=job.original_response.backend_id,

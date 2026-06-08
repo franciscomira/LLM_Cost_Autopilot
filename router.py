@@ -24,6 +24,7 @@ import time
 from pathlib import Path
 
 import httpx
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from budget import BudgetState
 from models import BudgetPool, BudgetSnapshot, ModelConfig
@@ -41,11 +42,17 @@ def _load_prompt_template() -> str:
 
 # ── Ollama call (direct HTTP — keeps the router dependency minimal) ────────────
 
+@retry(
+    retry=retry_if_exception_type((httpx.TransportError, httpx.TimeoutException)),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=8),
+    reraise=True,
+)
 async def _call_ollama_router(
     prompt_text: str,
     router_config: ModelConfig,
     base_url: str,
-    timeout: float = 120.0,
+    timeout: float = 30.0,
 ) -> str:
     """Return the raw text response from the local router model."""
     template = _load_prompt_template()
@@ -128,7 +135,7 @@ async def classify_prompt(
 
 # ── Budget-aware backend resolution ───────────────────────────────────────────
 
-def resolve_backend(
+async def resolve_backend(
     tier: int,
     confidence: float,
     budget: BudgetState,
@@ -148,7 +155,7 @@ def resolve_backend(
       "budget_exhausted"         — both pools low; best-effort choice
       "fallback"                 — primary pool low; using fallback backend
     """
-    snapshot: BudgetSnapshot = budget.snapshot()
+    snapshot: BudgetSnapshot = await budget.snapshot()
     policy = registry.tier_policy(tier)
     thresholds = registry.low_budget_thresholds
 
@@ -241,7 +248,7 @@ async def route(
         settings=settings,
     )
 
-    selected, reason = resolve_backend(
+    selected, reason = await resolve_backend(
         tier=tier,
         confidence=confidence,
         budget=budget,

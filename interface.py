@@ -108,7 +108,7 @@ async def send_request(
     response.was_escalated = was_escalated
 
     # Record spend in budget
-    budget.record_spend(
+    await budget.record_spend(
         pool=config.budget_pool,
         cost_usd=response.cost_usd,
         premium_requests=response.premium_requests_used,
@@ -118,7 +118,7 @@ async def send_request(
     log_id: int | None = None
     if log:
         prompt_text = " ".join(m.get("content", "") for m in messages)
-        log_id = budget.log_request(
+        log_id = await budget.log_request(
             timestamp=response.timestamp,
             prompt_hash=_hash_prompt(prompt_text),
             complexity_tier=complexity_tier,
