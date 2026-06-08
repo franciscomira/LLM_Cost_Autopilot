@@ -1,14 +1,23 @@
 # LLM Cost Autopilot
 
-A budget-aware LLM router that maximises free local inference, spends GitHub Copilot premium requests for the middle tier, and reserves Claude credit for the genuinely hardest requests.
-
-Built as a portfolio project and personal tool.
+A budget-aware LLM router that maximises free local inference, spends GitHub Copilot premium requests for the middle tier, and reserves Claude credit for the genuinely hardest requests — built as a portfolio project and personal tool.
 
 ---
 
 ## The headline result
 
-> Routing 500 diverse prompts: **~60% served free on local Ollama**, ~35% via Copilot, ~5% via Claude — achieving **>90% cost reduction** vs an all-Claude-Opus baseline while an async sampling loop verifies quality.
+> Routing 500 diverse prompts: **~60% served free on local Ollama**, ~35% via Copilot, ~5% via Claude — achieving **~92% cost reduction** vs an all-Claude-Opus baseline while an async sampling loop verifies quality.
+
+```
+  ★  Cost saved vs all-premium baseline:  ~92%
+  ★  Requests served free (local):         ~60%
+
+  FREE  (local Ollama):      ~300  (60%)
+  COPILOT_PREMIUM (GitHub):  ~175  (35%)
+  CLAUDE_CREDIT (Anthropic):  ~25  ( 5%)
+  Avg router confidence:     3.8 / 5.0
+  Router tier accuracy:      ~82%
+```
 
 ---
 
@@ -21,6 +30,7 @@ User prompt
 ┌─────────────────────────────────────────────────────────────────┐
 │  Local router model (Ollama)                                     │
 │  Classifies: tier (1/2/3) + confidence (1–5)                    │
+│  Retries up to 3× on network failure (tenacity)                 │
 └─────────────────┬───────────────────────────────────────────────┘
                   │
           Budget-aware policy (routing.yaml)
@@ -48,28 +58,33 @@ User prompt
          Mis-routes → training data
 ```
 
-Three budget pools:
-- **FREE** — local Ollama; no cost, bounded only by hardware
-- **COPILOT_PREMIUM** — GitHub Copilot premium requests; the workhorse (~300/month on Pro+)
-- **CLAUDE_CREDIT** — Anthropic API / Claude Pro credit ($20/month); reserved for the hardest 5%
+**Three budget pools:**
 
-The router maximises the FREE pool first, then spends COPILOT_PREMIUM, and only draws on CLAUDE_CREDIT when confidence is very high on a complex task — or as a Copilot fallback when the Copilot pool runs low.
+| Pool | Backend | Cost |
+|---|---|---|
+| `FREE` | Local Ollama | $0 — bounded by hardware |
+| `COPILOT_PREMIUM` | GitHub Copilot (gpt-4o-mini / gpt-4o) | Premium requests (~300/mo on Pro+) |
+| `CLAUDE_CREDIT` | Anthropic Claude | $20/mo credit — reserved for the hardest ~5% |
+
+The router maximises `FREE` first, spends `COPILOT_PREMIUM` for the workhorse tier, and only draws on `CLAUDE_CREDIT` when confidence is high on a genuinely complex task — or as a Copilot fallback when Copilot requests run low.
 
 ---
 
 ## Architecture
 
-| Component | File | Role |
+| Component | File(s) | Role |
 |---|---|---|
-| Hardware profiler | `hardware_profile.py` | Detects RAM/GPU, recommends Ollama models |
+| Hardware profiler | `hardware_profile.py` | Detects RAM/GPU once at setup, recommends Ollama models |
 | Model interface | `interface.py` | `send_request()` — one function, three backends |
-| Budget registry | `budget.py` | Tracks monthly spend per pool, persisted to SQLite |
+| Backend adapters | `ollama.py`, `github_models.py`, `claude.py` | Provider-specific HTTP/SDK calls |
+| Budget registry | `budget.py` | Async (aiosqlite) monthly spend tracking per pool |
 | Model registry | `registry.py` | Loads `routing.yaml`, maps tier → backend config |
 | Router | `router.py` | LLM classification + budget-aware `resolve_backend()` |
-| Verifier | `verifier.py` + `verification_queue.py` | Async background quality check |
+| Verifier | `verifier.py` + `verification_queue.py` | Async background quality check + training data collection |
 | Dashboard data | `dashboard_data.py` | SQL queries powering the dashboard and `/v1/stats` |
-| Dashboard | `dashboard.py` | Streamlit UI |
-| API | `api.py` | FastAPI service (Phase 5) |
+| Streamlit UI | `dashboard.py` + `pages/1_Playground.py` | Cost dashboard + interactive prompt tester |
+| API | `api.py` | FastAPI service with auth middleware and structured logging |
+| Logging | `logging_config.py` | JSON log formatter with per-request `request_id` correlation |
 
 ### Why these design choices
 
@@ -80,6 +95,26 @@ The router maximises the FREE pool first, then spends COPILOT_PREMIUM, and only 
 **Sampled verification, not verify-everything.** Verifying every cheap response against a premium model would spend the budget you just saved. Verifying 10% + every low-confidence route catches systematic failures without breaking the economics.
 
 **Routing reason in every response.** The `routing_reason` field (`"primary"`, `"low_confidence"`, `"claude_reserve_threshold"`, `"budget_spill_to_claude"`, `"budget_exhausted"`, `"fallback"`) makes the system self-aware and gives the dashboard actionable signal.
+
+---
+
+## Production hardening
+
+Beyond the core routing logic, the service has been hardened across three sprints:
+
+### Security (Sprint 1)
+- **API key authentication** — `X-API-Key` HTTP middleware on all `/v1/*` routes. Set `API_KEY` in `.env`; if unset, auth is disabled for local dev.
+- **Input size caps** — message content capped at 32 000 chars; message list capped at 50 items (Pydantic validation), preventing runaway Claude spend from malformed requests.
+
+### Observability (Sprint 2)
+- **Structured JSON logging** — every log line is one JSON object on stdout, ready for log aggregators (Datadog, CloudWatch, Loki). Configurable via `LOG_LEVEL`.
+- **Request-ID correlation** — a `request_id` UUID is set per request, echoed as `X-Request-Id` in the response header, and present in every log field — making distributed tracing possible with no additional infrastructure.
+- **Budget alert webhook** — when Claude spend crosses a configurable threshold, the service POSTs a JSON alert to `BUDGET_ALERT_WEBHOOK_URL` (Slack, PagerDuty, etc.). Fires once per crossing to avoid spam.
+
+### Resilience (Sprint 3)
+- **Tenacity retries on Ollama** — `_call_ollama_router` retries up to 3× on network/timeout errors with exponential back-off (1–8 s). Per-attempt timeout tightened from 120 s → 30 s.
+- **Generalised fallback** — any provider failure (Ollama, Copilot, or Claude) now attempts the tier's fallback backend, not just Ollama failures. Guards against retrying the same backend when primary and fallback coincide.
+- **Non-blocking SQLite** — `BudgetState` migrated from synchronous `sqlite3` to `aiosqlite`, removing the serialisation bottleneck under concurrent load.
 
 ---
 
@@ -98,15 +133,13 @@ The router maximises the FREE pool first, then spends COPILOT_PREMIUM, and only 
 python hardware_profile.py
 ```
 
-This detects your RAM and GPU and recommends which Ollama models to pull. Output is written to `config/hardware_profile.json` and read by the registry at startup.
+Detects your RAM and GPU, recommends which Ollama models to pull. Output written to `config/hardware_profile.json`.
 
 ### 2. Pull Ollama models
 
-Pull the models recommended by the profiler (typically `phi3:mini` on modest hardware):
-
 ```bash
 ollama pull phi3:mini          # router model
-ollama pull phi3:mini          # Tier-1 generator (or a larger model if you have VRAM)
+ollama pull phi3:mini          # Tier-1 generator (or larger if you have VRAM)
 ```
 
 ### 3. Configure credentials
@@ -115,19 +148,14 @@ ollama pull phi3:mini          # Tier-1 generator (or a larger model if you have
 cp .env.example .env
 ```
 
-Edit `.env`:
-
-```env
-GITHUB_TOKEN=ghp_...           # PAT with models:read scope
-ANTHROPIC_API_KEY=sk-ant-...   # from console.anthropic.com
-USE_CLAUDE_SUBSCRIPTION=false  # set true once Claude Pro SDK ships
-```
+Edit `.env` — see [Environment variables](#environment-variables) below.
 
 ### 4. Run locally
 
 ```bash
 pip install -e .
 uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+
 # Dashboard (separate terminal):
 streamlit run dashboard.py
 ```
@@ -139,10 +167,12 @@ docker-compose up
 ```
 
 Services:
-- `ollama-init` — one-shot container that pulls the required models, then exits
 - `ollama` — local LLM backend on port 11434
+- `ollama-init` — one-shot container that pulls required models, then exits
 - `api` — FastAPI router on port 8000
 - `dashboard` — Streamlit on port 8501
+
+> **First run:** after `docker-compose up`, the `ollama-init` container pulls the router and Tier-1 models automatically.
 
 ---
 
@@ -153,11 +183,12 @@ Services:
 ```bash
 curl -s -X POST http://localhost:8000/v1/completions \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-key" \
   -d '{"messages": [{"role": "user", "content": "Summarise the key points of the CAP theorem."}]}' \
   | jq '.routing'
 ```
 
-Response includes a `routing` block:
+Example response `routing` block:
 
 ```json
 {
@@ -177,6 +208,8 @@ Response includes a `routing` block:
 }
 ```
 
+The response header also includes `X-Request-Id` for log correlation.
+
 ### Check budget and savings
 
 ```bash
@@ -186,7 +219,7 @@ curl http://localhost:8000/v1/stats | jq
 ### Live-tune routing thresholds (no restart needed)
 
 ```bash
-# Lower the Claude-reserve confidence cutoff so more hard requests stay on Copilot
+# Lower the Claude-reserve confidence cutoff
 curl -X PUT http://localhost:8000/v1/routing-config \
   -H "Content-Type: application/json" \
   -d '{"claude_reserve_threshold": 5.0}'
@@ -200,6 +233,8 @@ curl -X POST http://localhost:8000/v1/routing-config/reload
 ```bash
 python load_test.py --count 500 --concurrency 20
 ```
+
+Results are saved to `results/load_test_<timestamp>.json`.
 
 ---
 
@@ -217,11 +252,11 @@ All thresholds live in `routing.yaml` and can be updated live via `PUT /v1/routi
 | `verification.sample_rate` | 0.10 | Fraction of requests verified async (0.0–1.0) |
 | `verification.always_verify_confidence_below` | 3 | Always verify when confidence < this |
 
-**To maximise local inference:** raise `confidence_min` for Tier 1 (more prompts stay local), lower the Tier-2 `fallback_backend` threshold.
+**To maximise local inference:** raise `confidence_min` for Tier 1 so more prompts stay local.
 
-**To protect Copilot budget:** lower `low_budget_thresholds.copilot_requests_remaining` and raise `tiers.3.claude_reserve_threshold` so complex requests spill to Claude sooner.
+**To protect Copilot budget:** lower `low_budget_thresholds.copilot_requests_remaining` and raise `claude_reserve_threshold` so complex requests spill to Claude sooner.
 
-**To minimise Claude spend:** set `claude_reserve_threshold: 5.0` (effectively disable Claude reservation) and lower `claude_usd_remaining` to a high floor.
+**To minimise Claude spend:** set `claude_reserve_threshold: 5.0` (effectively disable the Claude reservation) and raise `claude_usd_remaining` floor.
 
 ---
 
@@ -247,32 +282,13 @@ A three-tier routing layer that classifies each request locally (free) and route
 
 **Sampled async verification.** Verifying every cheap response against a premium model would defeat the purpose. The system verifies ~10% of requests plus every low-confidence route, out-of-band after the user receives their response. Mis-routed examples automatically become training data for the router, closing the feedback loop.
 
-**Routing reason transparency.** Every response carries a `routing_reason` explaining the decision: `"primary"` (normal path), `"low_confidence"` (bumped up), `"claude_reserve_threshold"` (high-confidence hard task → Claude), `"budget_spill_to_claude"` (Copilot pool low). This makes the system debuggable and the dashboard actionable.
+**Routing reason transparency.** Every response carries a `routing_reason` explaining the decision: `"primary"`, `"low_confidence"`, `"claude_reserve_threshold"`, `"budget_spill_to_claude"`, `"budget_exhausted"`, `"fallback"`. This makes the system debuggable and the dashboard actionable.
 
-### Results (500-prompt load test)
-
-```
-  ★  Cost saved vs all-premium baseline:  ~92%
-  ★  Requests served free (local):         ~60%
-
-  ROUTING DISTRIBUTION
-  FREE  (local Ollama):      ~300  (60%)
-  COPILOT_PREMIUM (GitHub):  ~175  (35%)
-  CLAUDE_CREDIT (Anthropic):  ~25  ( 5%)
-  Avg router confidence:     3.8 / 5.0
-  Router tier accuracy:      ~82%
-
-  COST COMPARISON
-  Actual spend:            ~$0.02   (Copilot requests + tiny Claude usage)
-  Baseline (all Opus-4):   ~$0.25
-  Savings:                 ~$0.23  (~92%)
-```
-
-*Exact numbers from your run are saved to `results/load_test_<timestamp>.json`.*
+**Production-grade foundations.** Auth middleware, structured JSON logging with request-ID correlation, budget alert webhooks, tenacity retries with bounded timeouts, and an async SQLite layer (aiosqlite) — the same concerns a real service would face.
 
 ### The feedback flywheel
 
-Every verified mis-route (where the verifier's higher-tier response significantly diverges from the original) is logged to the `verification_log` table. Running `python router.py --eval` replays these against the router and shows where the few-shot prompt is weak. Periodic refreshes of the few-shot examples in `prompts/router_classify.txt` improve routing accuracy over time without any model retraining.
+Every verified mis-route is logged to the `verification_log` table. Replaying these against the router shows where the few-shot prompt is weak. Periodic refreshes of `prompts/router_classify.txt` improve routing accuracy over time without model retraining.
 
 ---
 
@@ -280,27 +296,35 @@ Every verified mis-route (where the verifier's higher-tier response significantl
 
 ```
 LLM_Cost_Autopilot/
-├── api.py                   # FastAPI service
-├── router.py                # Classification + budget-aware resolution
-├── interface.py             # Unified send_request() across all backends
-├── budget.py                # Monthly budget tracking (SQLite)
-├── registry.py              # routing.yaml → ModelConfig objects
-├── models.py                # Shared dataclasses (ModelConfig, Response, …)
-├── verifier.py              # Quality verification logic
-├── verification_queue.py    # Async background queue
-├── dashboard_data.py        # SQL queries for dashboard + /v1/stats
-├── dashboard.py             # Streamlit UI
-├── hardware_profile.py      # One-time hardware detection
-├── load_test.py             # Phase 6 load test + savings report
-├── routing.yaml             # Live-editable routing policy
-├── models_by_hardware.yaml  # Model → hardware size mapping
+├── api.py                    # FastAPI service — auth middleware, endpoints, lifespan
+├── router.py                 # LLM classification + budget-aware resolve_backend()
+├── interface.py              # Unified send_request() across all backends
+├── budget.py                 # Async monthly budget tracking (aiosqlite)
+├── registry.py               # routing.yaml → ModelConfig objects
+├── models.py                 # Shared dataclasses (ModelConfig, Response, BudgetSnapshot …)
+├── logging_config.py         # JSON log formatter + request_id ContextVar
+├── verifier.py               # Quality verification logic (LLM-as-judge)
+├── verification_queue.py     # Async background queue (fire-and-forget)
+├── dashboard_data.py         # SQL queries for dashboard + /v1/stats
+├── dashboard.py              # Streamlit cost dashboard
+├── pages/
+│   └── 1_Playground.py       # Interactive prompt tester (Streamlit page)
+├── hardware_profile.py       # One-time hardware detection → recommends Ollama models
+├── check_models.py           # Utility to verify Ollama models are available
+├── load_test.py              # 500-prompt load test + savings report
+├── ollama.py                 # Ollama backend adapter
+├── github_models.py          # GitHub Models (Copilot) backend adapter
+├── claude.py                 # Anthropic Claude backend adapter
+├── routing.yaml              # Live-editable routing policy
+├── models_by_hardware.yaml   # Hardware size → recommended model mapping
 ├── prompts/
-│   └── router_classify.txt  # Few-shot classification prompt (versioned)
-├── data/
-│   └── autopilot.db         # SQLite — request log, budget, verification log
+│   └── router_classify.txt   # Few-shot classification prompt (versioned)
 ├── tests/
-│   ├── test_router_accuracy.py
-│   └── test_verifier.py
+│   ├── test_router_accuracy.py  # Router tier accuracy against labeled dataset
+│   └── test_verifier.py         # Verifier unit tests
+├── test_smoke.py             # Budget, routing, and API smoke tests
+├── data/
+│   └── autopilot.db          # SQLite — request log, budget, verification log
 ├── Dockerfile
 └── docker-compose.yml
 ```
@@ -310,13 +334,19 @@ LLM_Cost_Autopilot/
 ## Development
 
 ```bash
-# Run tests
-pytest tests/ -v
+# Install in editable mode
+pip install -e ".[dev]"
 
-# Check router accuracy against the labeled dataset
-python -m pytest tests/test_router_accuracy.py -v
+# Run smoke tests (no live backends required)
+pytest test_smoke.py -v
 
-# Dry-run the load test (validate prompts, no API calls)
+# Run router accuracy evaluation (requires Ollama running)
+pytest tests/test_router_accuracy.py -v -s --timeout=300
+
+# Run verifier tests
+pytest tests/test_verifier.py -v
+
+# Dry-run the load test (validates prompts, no API calls)
 python load_test.py --dry-run --count 500
 ```
 
@@ -331,3 +361,7 @@ python load_test.py --dry-run --count 500
 | `USE_CLAUDE_SUBSCRIPTION` | `false` | `true` to use Claude Pro SDK credit |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama endpoint |
 | `DB_PATH` | `./data/autopilot.db` | SQLite database path |
+| `API_KEY` | — | If set, all `/v1/*` routes require `X-API-Key: <value>` |
+| `LOG_LEVEL` | `INFO` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `BUDGET_ALERT_WEBHOOK_URL` | — | URL to POST JSON alerts when Claude spend crosses threshold |
+| `BUDGET_ALERT_THRESHOLD_USD` | — | Claude spend (USD) that triggers the webhook alert |
