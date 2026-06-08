@@ -331,6 +331,12 @@ LLM_Cost_Autopilot/
 
 ---
 
+## Engineering journal
+
+[`docs/engineering_journal.md`](docs/engineering_journal.md) covers the design decisions and trade-offs made during each phase — why LLM classification instead of rules, why budget pools instead of price-per-token, why aiosqlite, how the verification sampling rate was chosen, and what's deferred and why.
+
+---
+
 ## Development
 
 ```bash
