@@ -1,3 +1,12 @@
+I got tired of paying premium API prices for prompts like "convert this date to ISO format".
+This gateway routes each request to the cheapest model that can handle it — local models for
+simple tasks, GPT-4o or Claude for harder ones. A background verifier samples responses and
+feeds mis-routes back as training data, so the router improves from live traffic.
+
+Across my own usage: ~92% cost reduction at ~94% quality parity.
+
+If you want to check my demo: www.linkedin.com/in/francisco-mira
+
 # LLM Gateway
 
 **A production-grade LLM gateway that reduced API costs by ~92% while maintaining ~94% quality parity** — by routing each request to the cheapest capable model, verified by an async sampling loop that feeds mis-routes back as training data.
