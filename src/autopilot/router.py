@@ -30,6 +30,7 @@ from autopilot.budget import BudgetState
 from autopilot.models import BudgetPool, BudgetSnapshot, ModelConfig
 from autopilot.registry import ModelRegistry
 from autopilot.interface import AutopilotSettings
+from autopilot.router_feedback import load_feedback_examples
 
 
 # ── Prompt template ────────────────────────────────────────────────────────────
@@ -37,7 +38,9 @@ from autopilot.interface import AutopilotSettings
 _PROMPT_TEMPLATE_PATH = Path(__file__).parent / "prompts" / "router_classify.txt"
 
 def _load_prompt_template() -> str:
-    return _PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
+    template = _PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
+    feedback = load_feedback_examples()
+    return template.replace("{FEEDBACK_EXAMPLES}", feedback)
 
 
 # ── Ollama call (direct HTTP — keeps the router dependency minimal) ────────────

@@ -86,6 +86,7 @@ Prompt: "Design a database schema for a multi-tenant SaaS with row-level securit
 Prompt: "Write a persuasive essay arguing both sides of remote work policy, then give a balanced recommendation."
 {"tier": 3, "confidence": 4}
 ---
+{FEEDBACK_EXAMPLES}
 
 Now classify the following prompt. Output ONLY the JSON object — no explanation, no markdown, no extra text.
 

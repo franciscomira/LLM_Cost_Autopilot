@@ -236,6 +236,49 @@ class RoutingConfigUpdate(BaseModel):
     claude_reserve_threshold: float | None = None
 
 
+# ── Anthropic Messages API compatibility shim ──────────────────────────────────
+# Clients that set ANTHROPIC_BASE_URL=http://localhost:8000 (Claude Code, the
+# Anthropic Python SDK, etc.) will hit this endpoint. The `model` field is
+# accepted but ignored — the router decides the actual backend.
+
+class _TextBlock(BaseModel):
+    type: str = "text"
+    text: str = ""
+
+class _AnthropicInboundMessage(BaseModel):
+    role: str
+    # Anthropic allows content as a plain string or a list of typed blocks
+    content: str | list[_TextBlock]
+
+class MessagesRequest(BaseModel):
+    model: str = "claude-haiku-4-5-20251001"   # ignored — router decides
+    max_tokens: int = 1024
+    system: str | list[_TextBlock] | None = None
+    messages: list[_AnthropicInboundMessage] = Field(..., min_length=1, max_length=_MAX_MESSAGES)
+    stream: bool = False
+
+    def to_internal_messages(self) -> list[dict]:
+        """Flatten Anthropic request shape to the internal {role, content: str} list."""
+        out: list[dict] = []
+
+        if self.system:
+            sys_text = (
+                self.system if isinstance(self.system, str)
+                else " ".join(b.text for b in self.system if b.type == "text")
+            )
+            if sys_text:
+                out.append({"role": "system", "content": sys_text[:_MAX_CONTENT_CHARS]})
+
+        for m in self.messages:
+            text = (
+                m.content if isinstance(m.content, str)
+                else " ".join(b.text for b in m.content if b.type == "text")
+            )
+            out.append({"role": m.role, "content": text[:_MAX_CONTENT_CHARS]})
+
+        return out
+
+
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 async def _stream_completions(
@@ -423,6 +466,158 @@ async def completions(req: CompletionRequest):
             premium_requests_used=response.premium_requests_used,
         ),
     )
+
+
+async def _anthropic_stream(
+    messages: list[dict],
+    selected_config,
+    tier: int | None,
+    confidence: float | None,
+    routing_reason: str,
+    input_tokens_hint: int,
+) -> AsyncGenerator[str, None]:
+    """SSE generator that speaks the Anthropic streaming wire protocol."""
+    msg_id = f"msg_{uuid.uuid4().hex[:24]}"
+    usage_out: dict = {}
+    t0 = time.perf_counter()
+
+    # message_start
+    yield (
+        f"event: message_start\n"
+        f"data: {json.dumps({'type': 'message_start', 'message': {'id': msg_id, 'type': 'message', 'role': 'assistant', 'content': [], 'model': selected_config.model, 'stop_reason': None, 'stop_sequence': None, 'usage': {'input_tokens': input_tokens_hint, 'output_tokens': 0}}})}\n\n"
+    )
+    yield "event: content_block_start\ndata: " + json.dumps({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}) + "\n\n"
+    yield "event: ping\ndata: {\"type\": \"ping\"}\n\n"
+
+    try:
+        if selected_config.provider == "ollama":
+            gen = ollama_backend.send_stream(messages, selected_config, usage_out, _state.settings.ollama_base_url)
+        elif selected_config.provider == "github_models":
+            gen = github_models.send_stream(messages, selected_config, _state.settings.github_token, usage_out)
+        elif selected_config.provider == "anthropic":
+            gen = claude_backend.send_stream(messages, selected_config, usage_out)
+        else:
+            yield f"event: error\ndata: {json.dumps({'type': 'error', 'error': {'type': 'api_error', 'message': f'Unknown provider: {selected_config.provider}'}})}\n\n"
+            return
+
+        async for chunk in gen:
+            yield "event: content_block_delta\ndata: " + json.dumps({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": chunk}}) + "\n\n"
+
+    except Exception as exc:
+        logger.error("anthropic stream error", extra={"error": str(exc), "backend_id": selected_config.backend_id})
+        yield f"event: error\ndata: {json.dumps({'type': 'error', 'error': {'type': 'api_error', 'message': str(exc)}})}\n\n"
+        return
+
+    output_tokens = usage_out.get("output_tokens", 0)
+    latency_ms = usage_out.get("latency_ms", (time.perf_counter() - t0) * 1000)
+    cost_usd = selected_config.estimate_cost_usd(input_tokens_hint, output_tokens)
+    premium_requests = (
+        selected_config.premium_request_multiplier
+        if selected_config.budget_pool == BudgetPool.COPILOT_PREMIUM else 0.0
+    )
+
+    await _state.budget.record_spend(pool=selected_config.budget_pool, cost_usd=cost_usd, premium_requests=premium_requests)
+    prompt_text = " ".join(m["content"] for m in messages if m["role"] == "user")
+    await _state.budget.log_request(
+        timestamp=t0, prompt_hash=_hash_prompt(prompt_text),
+        complexity_tier=tier, router_confidence=confidence,
+        backend_id=selected_config.backend_id, budget_pool=selected_config.budget_pool,
+        input_tokens=input_tokens_hint, output_tokens=output_tokens,
+        latency_ms=round(latency_ms, 1), cost_usd=cost_usd,
+        premium_requests=premium_requests, routing_reason=routing_reason,
+    )
+
+    yield "event: content_block_stop\ndata: " + json.dumps({"type": "content_block_stop", "index": 0}) + "\n\n"
+    yield "event: message_delta\ndata: " + json.dumps({"type": "message_delta", "delta": {"stop_reason": "end_turn", "stop_sequence": None}, "usage": {"output_tokens": output_tokens}}) + "\n\n"
+    yield "event: message_stop\ndata: " + json.dumps({"type": "message_stop"}) + "\n\n"
+
+
+@app.post("/v1/messages")
+async def messages(req: MessagesRequest):
+    """
+    Anthropic Messages API-compatible endpoint.
+    Set ANTHROPIC_BASE_URL=http://localhost:8000 in any Anthropic SDK client
+    (Claude Code, Python SDK, etc.) to route transparently through this gateway.
+    The `model` field is accepted but ignored — the router decides the backend.
+    """
+    internal_messages = req.to_internal_messages()
+    prompt_text = " ".join(m["content"] for m in internal_messages if m["role"] == "user")
+
+    selected_config, tier, confidence, routing_reason = await route(
+        prompt_text=prompt_text,
+        budget=_state.budget,
+        registry=_state.registry,
+        settings=_state.settings,
+    )
+
+    # Rough input token estimate for streaming (actual usage filled in by backend)
+    input_tokens_hint = sum(len(m["content"].split()) * 4 // 3 for m in internal_messages)
+
+    if req.stream:
+        return StreamingResponse(
+            _anthropic_stream(internal_messages, selected_config, tier, confidence, routing_reason, input_tokens_hint),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    try:
+        response, log_id = await send_request(
+            messages=internal_messages,
+            config=selected_config,
+            budget=_state.budget,
+            settings=_state.settings,
+            complexity_tier=tier,
+            router_confidence=confidence,
+            routing_reason=routing_reason,
+        )
+    except Exception as exc:
+        try:
+            fallback_config = _state.registry.fallback_backend(tier)
+            if fallback_config.backend_id == selected_config.backend_id:
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
+            response, log_id = await send_request(
+                messages=internal_messages,
+                config=fallback_config,
+                budget=_state.budget,
+                settings=_state.settings,
+                complexity_tier=tier,
+                router_confidence=confidence,
+                routing_reason="fallback",
+            )
+        except HTTPException:
+            raise
+        except Exception as exc2:
+            raise HTTPException(status_code=502, detail=str(exc2)) from exc2
+
+    ver_cfg = _state.registry.verification_config
+    if should_verify(response, ver_cfg):
+        _state.vq.enqueue(VerificationJob(
+            request_log_id=log_id, messages=internal_messages,
+            original_response=response, tier=tier, confidence=confidence,
+        ))
+
+    msg_id = f"msg_{uuid.uuid4().hex[:24]}"
+    return JSONResponse(content={
+        "id": msg_id,
+        "type": "message",
+        "role": "assistant",
+        "content": [{"type": "text", "text": response.text}],
+        "model": response.model,
+        "stop_reason": "end_turn",
+        "stop_sequence": None,
+        "usage": {
+            "input_tokens": response.input_tokens,
+            "output_tokens": response.output_tokens,
+        },
+        # Non-standard extension: routing metadata so callers can inspect decisions
+        "x_gateway_routing": {
+            "backend_id": response.backend_id,
+            "routing_reason": routing_reason,
+            "complexity_tier": tier,
+            "router_confidence": confidence,
+            "cost_usd": response.cost_usd,
+        },
+    })
 
 
 @app.get("/v1/models", response_model=list[BackendStatus])

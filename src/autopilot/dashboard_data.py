@@ -140,17 +140,39 @@ def get_budget_status(
     claude_proj  = (claude_spent  / rate) if rate > 0 else 0.0
     copilot_proj = (copilot_used  / rate) if rate > 0 else 0.0
 
+    # Days until each pool is exhausted at the current daily burn rate
+    days_remaining_in_month = days_in_month - days_elapsed
+    claude_daily  = claude_spent  / days_elapsed if days_elapsed > 0 else 0.0
+    copilot_daily = copilot_used  / days_elapsed if days_elapsed > 0 else 0.0
+
+    claude_remaining  = max(0.0, claude_limit_usd        - claude_spent)
+    copilot_remaining = max(0.0, copilot_limit_requests  - copilot_used)
+
+    # None means "won't exhaust within the month at current rate"
+    claude_days_until_exhausted: float | None = (
+        min(claude_remaining / claude_daily, days_remaining_in_month)
+        if claude_daily > 0 and claude_remaining > 0
+        else None
+    )
+    copilot_days_until_exhausted: float | None = (
+        min(copilot_remaining / copilot_daily, days_remaining_in_month)
+        if copilot_daily > 0 and copilot_remaining > 0
+        else None
+    )
+
     return {
         "claude_spent":        claude_spent,
         "claude_limit":        claude_limit_usd,
-        "claude_remaining":    max(0.0, claude_limit_usd - claude_spent),
+        "claude_remaining":    claude_remaining,
         "claude_pct":          min(100.0, claude_spent / claude_limit_usd * 100) if claude_limit_usd else 0.0,
         "claude_projected_eom": claude_proj,
+        "claude_days_until_exhausted": claude_days_until_exhausted,
         "copilot_used":        copilot_used,
         "copilot_limit":       copilot_limit_requests,
-        "copilot_remaining":   max(0.0, copilot_limit_requests - copilot_used),
+        "copilot_remaining":   copilot_remaining,
         "copilot_pct":         min(100.0, copilot_used / copilot_limit_requests * 100) if copilot_limit_requests else 0.0,
         "copilot_projected_eom": copilot_proj,
+        "copilot_days_until_exhausted": copilot_days_until_exhausted,
         "days_elapsed":        days_elapsed,
         "days_in_month":       days_in_month,
     }

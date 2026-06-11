@@ -1,6 +1,8 @@
-# LLM Cost Autopilot
+# LLM Gateway
 
-**I built a system that reduced LLM API costs by ~92% while maintaining ~94% quality parity with premium models** — by routing each request to the cheapest model capable of handling it, verified by an async sampling loop that feeds mis-routes back as training data.
+**A production-grade LLM gateway that reduced API costs by ~92% while maintaining ~94% quality parity** — by routing each request to the cheapest capable model, verified by an async sampling loop that feeds mis-routes back as training data.
+
+Drop-in compatible with the Anthropic SDK: point `ANTHROPIC_BASE_URL=http://localhost:8000` at the gateway and existing tools (Claude Code, any Anthropic SDK client) route transparently through it — no code changes required.
 
 Built as a portfolio project and personal tool; the same routing problem every company running LLMs at scale faces.
 
@@ -196,6 +198,31 @@ Services:
 
 ## Using the API
 
+### Drop-in Anthropic SDK compatibility
+
+Set one environment variable and any tool that uses the Anthropic SDK routes through the gateway automatically:
+
+```bash
+export ANTHROPIC_BASE_URL=http://localhost:8000
+export ANTHROPIC_API_KEY=any-value   # gateway ignores this; auth uses X-API-Key
+
+# Claude Code — every prompt now routes through the gateway
+claude
+
+# Python SDK
+from anthropic import Anthropic
+client = Anthropic()   # picks up ANTHROPIC_BASE_URL automatically
+response = client.messages.create(
+    model="claude-opus-4-8",   # ignored — the gateway's router decides the actual model
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Summarise the CAP theorem."}]
+)
+```
+
+The `model` field is accepted but ignored — the router classifies each request and picks the cheapest capable backend. The response is returned in the standard Anthropic format, so the caller never knows it was rerouted.
+
+---
+
 ### Route a request
 
 ```bash
@@ -338,8 +365,9 @@ Every verified mis-route is logged to the `verification_log` table. Replaying th
 ```
 LLM_Cost_Autopilot/
 ├── src/autopilot/            # Core application package
-│   ├── api.py                #   FastAPI service — auth middleware, endpoints, lifespan
+│   ├── api.py                #   FastAPI service — auth, /v1/messages shim, lifespan
 │   ├── router.py             #   LLM classification + budget-aware resolve_backend()
+│   ├── router_feedback.py    #   Injects verifier corrections into the router prompt
 │   ├── interface.py          #   Unified send_request() across all backends
 │   ├── budget.py             #   Async monthly budget tracking (aiosqlite)
 │   ├── registry.py           #   routing.yaml → ModelConfig objects

@@ -46,3 +46,6 @@ Thumbs.db
 # Misc artifacts
 =*
 _pr_body.md
+
+# Local-only docs (video/demo recording scripts)
+docs/demo_script.md

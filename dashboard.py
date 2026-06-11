@@ -282,6 +282,20 @@ with tab_dash:
     import pandas as pd
     import altair as alt
 
+    # ── Budget depletion alerts ────────────────────────────────────────────────
+    _cd = b.get("copilot_days_until_exhausted")
+    _cld = b.get("claude_days_until_exhausted")
+    if _cd is not None and _cd <= 3:
+        st.error(f"🚨 **Copilot quota will be exhausted in ~{_cd:.0f} day{'s' if _cd != 1 else ''}** at the current rate. "
+                 "The router will spill to Claude automatically, but review your routing thresholds.")
+    elif _cd is not None and _cd <= 7:
+        st.warning(f"⚠️ **Copilot quota running low** — approximately **{_cd:.0f} days remaining** at current burn rate.")
+    if _cld is not None and _cld <= 3:
+        st.error(f"🚨 **Claude credit will be exhausted in ~{_cld:.0f} day{'s' if _cld != 1 else ''}** at the current rate. "
+                 "Requests will fall back to Copilot top once the credit is gone.")
+    elif _cld is not None and _cld <= 7:
+        st.warning(f"⚠️ **Claude credit running low** — approximately **{_cld:.0f} days remaining** at current burn rate.")
+
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("🆓 Served free locally", f"{h['free_pct']:.1f}%", help="% of requests handled by local Ollama (zero cloud cost)")
